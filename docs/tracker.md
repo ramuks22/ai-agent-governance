@@ -18,7 +18,10 @@
 | ---------- | -------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------- | ----------- |
 | AG-GOV-001 | Low      | Governance | **Initialize governance framework**: establish templates and configuration.                                              | PR merged                                                                                                                                                                                                                                                                                                                             | Bootstrap config and confirm hooks are installed.                                                                           | Merge     | Complete    |
 | AG-GOV-002 | Critical | Governance | **v1.1 Critical Fixes**: CI parity, branch protection bypass, template drift, noop hard-fail, tests.                     | PR merged                                                                                                                                                                                                                                                                                                                             | See implementation plan.                                                                                                    | Merge     | Complete    |
-| AG-GOV-003 | High     | Governance | **Installable distribution and upgrade path**: adoption requires manual copy and has no upgrade story.                   | Manual copy instructions                                                                                                                                                                                                                                                                                                              | Implement revised multi-phase installable distribution plan (see Future Scope).                                             | Discovery | In Progress |
+| AG-GOV-003 | High     | Governance | **Installable distribution and upgrade path**: adoption requires manual copy and has no upgrade story.                   | Epic for v1.0 Stage 0-2 execution. Child items: AG-GOV-011 (decision doc), AG-GOV-012 (package + CLI core), AG-GOV-013 (installer + idempotency). Branch implementation in progress: `codex/ag-gov-003-v1-installable`.                                                                                                                   | Implement revised multi-phase installable distribution plan (see Future Scope).                                             | Implementation | In Progress |
+| AG-GOV-011 | High     | Governance | **Stage 0 decision doc**: v1.0 boundaries and support policy need explicit, testable decisions before coding.            | Applicability: Not Required — Reason: documentation-only decision artifact with no runtime behavior change. Stage 0 artifact: `plans/ag-gov-003-stage0-decision-doc.md`.                                                                                                                                                                  | Publish one-page decision doc with support matrix, naming, security model, and non-goals for v1.0.                         | Validation | In Progress |
+| AG-GOV-012 | High     | Governance | **Stage 1 package + CLI core**: framework must be installable via package commands instead of manual file copy.          | Applicability: Required — Reason: introduces new CLI behavior (`init`, `check`, `doctor`) and package interface for adopters. Workshop artifact: `docs/requirements/AG-GOV-003/workshop.md` (shared with AG-GOV-013). Smoke tests added in `scripts/__tests__/cli.test.mjs`.                                                              | Add package CLI entrypoint, command router, compatibility shims, and smoke tests.                                           | Validation | In Progress |
+| AG-GOV-013 | High     | Governance | **Stage 2 installer/idempotency**: initialization must be safe to re-run and conflict-aware for hook managers.           | Applicability: Required — Reason: installer writes managed files/hooks and introduces manifest-based idempotency behavior. Workshop artifact: `docs/requirements/AG-GOV-003/workshop.md` (shared with AG-GOV-012). Manifest/checksum and hook strategy logic implemented in `scripts/governance-check.mjs`.                                 | Add `init` options (`--dry-run`, `--force`, `--preset`, `--hook-strategy`), manifest checksums, and conflict handling.    | Validation | In Progress |
 | AG-GOV-004 | High     | Governance | **Requirements workshop governance artifact**: workshop process, template, and Phase+State tracker model are missing.    | Initial push to `main` (bootstrap)                                                                                                                                                                                                                                                                                                    | Add workflow/template/docs updates only (no tooling expansion), aligned to governance source-of-truth docs.                 | Merge     | Complete    |
 | AG-GOV-005 | High     | Governance | **Security gate review follow-up**: close final review gaps before push (workflow compliance + test coverage + cleanup). | PR #2 merged to `main` (`926168a`); tests `43/43`, `governance:check`, `gate:precommit`, and `gate:prepush` all pass (2026-03-07).                                                                                                                                                                                                    | Use feature branch + tracker mapping, add unquoted assignment test coverage, remove minor code drift, and re-run all gates. | Merge     | Complete    |
 | AG-GOV-006 | High     | Governance | **Workshop applicability friction risk**: overhead can rise if teams cannot quickly decide when workshop is required.    | PR #3 (merge-by-command protocol); applicability evidence recorded in PR body as `Applicability: Not Required` (docs-only governance enhancement), with tracker-to-PR audit linkage.                                                                                                                                                  | Add a concise applicability decision checklist and examples to keep feature triage under one minute.                        | Merge     | Complete    |
@@ -39,14 +42,14 @@ Phase 0 - Decision doc (required before Phase 1)
 
 Phase 1 - Package the core (release gate)
 
-- Publish @org/governance (or final name) with a governance CLI that wraps gate logic and config parsing.
+- Publish @ramuks22/ai-agent-governance with an `ai-governance` CLI that wraps gate logic and config parsing.
 - Run gate logic from node_modules (no copied scripts).
 - Add governance doctor to validate config, hooks, and CI parity.
 - Add CLI smoke tests in this phase (init, doctor, basic gate run) as a release requirement.
 
 Phase 2 - Installer (idempotent, conflict-aware)
 
-- Implement governance init with --dry-run, --force, --preset, --hook-strategy.
+- Implement `ai-governance init` with --dry-run, --force, --preset, --hook-strategy.
 - Write a manifest (.governance/manifest.json) with version, normalized checksums, and preset.
 - Hook strategy:
   - Default to repo-local .githooks with core.hooksPath when safe.
@@ -55,10 +58,10 @@ Phase 2 - Installer (idempotent, conflict-aware)
 
 Phase 3 - Upgrade, rollback, and corruption handling
 
-- governance upgrade updates files that match normalized checksums (line endings and trailing whitespace normalized).
+- `ai-governance upgrade` updates files that match normalized checksums (line endings and trailing whitespace normalized).
 - For modified files, show diff and require explicit --force or --patch.
-- Use managed template blocks (BEGIN/END markers) and have governance doctor flag block corruption.
-- Provide governance rollback to restore prior manifest versions and backups.
+- Use managed template blocks (BEGIN/END markers) and have `ai-governance doctor` flag block corruption.
+- Provide `ai-governance rollback` to restore prior manifest versions and backups.
 
 Phase 4 - Presets and wizard
 
@@ -69,12 +72,12 @@ Phase 4 - Presets and wizard
 Phase 5 - CI integration (platform-agnostic)
 
 - Publish a version-pinned GitHub Action/workflow.
-- Provide a generic governance ci-check command with sample configs for GitLab and Bitbucket.
-- Ensure governance doctor reports CI parity and points to docs.
+- Provide a generic `ai-governance ci-check` command with sample configs for GitLab and Bitbucket.
+- Ensure `ai-governance doctor` reports CI parity and points to docs.
 
 Phase 6 - Migration for existing repos
 
-- Add governance adopt to map existing hooks and configs into governance equivalents.
+- Add `ai-governance adopt` to map existing hooks and configs into governance equivalents.
 - Provide a report-only mode that outputs a migration checklist and diffs.
 
 Phase 7 - Greenfield template
@@ -84,6 +87,6 @@ Phase 7 - Greenfield template
 
 Phase 8 - Release hardening and maintenance
 
-- Document offline install (npm i -D @org/governance; npx governance init).
+- Document offline install (npm i -D @ramuks22/ai-agent-governance; npx @ramuks22/ai-agent-governance init).
 - Maintain an upgrade path section and compatibility matrix.
 - Define a support SLA for releases and a policy for breaking changes.
