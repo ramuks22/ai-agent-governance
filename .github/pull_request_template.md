@@ -22,7 +22,7 @@
 - [ ] Tracker ID included and tracker phase/state updated
 - [ ] Applicability decision line included in PR body: `Applicability: Required|Not Required — Reason: <one line>`
 - [ ] Tracker evidence references this PR for applicability auditability (each tracker row in `Tracker > IDs` includes `PR #<this-PR-number>` before merge)
-- [ ] If `Applicability: Required`, requirements workshop artifact is linked, or `Hotfix Exception Used: Yes` is selected and the `Hotfix Exception` block is fully completed
+- [ ] If `Applicability: Required`, requirements workshop artifact is linked, or `Hotfix Exception Used: Yes` is selected and the `Hotfix Exception` block is fully completed (`N/A` when `Applicability: Not Required`)
 - [ ] No secrets committed (API keys/tokens/passwords)
 - [ ] No new XSS injection surfaces (sanitization preserved)
 - [ ] Lint + format checks pass
