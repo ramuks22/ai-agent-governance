@@ -8,6 +8,7 @@ This document defines delivery rules, source of truth, and local quality gates.
 - Workflows: `.agent/workflows/*.md`
 - Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`
 - Branch protection contract (canonical): `.agent/workflows/governance.md` -> `Required Branch Protection for main`
+- Owner merge exception policy (if active): `.agent/workflows/governance.md` -> `Required Branch Protection for main` -> `Approved exception policy (timeboxed)`
 
 ## Tracking Rules
 

@@ -104,7 +104,7 @@ checks with `--no-verify`:
 - Required pull request reviews: at least 1 approval
 - Dismiss stale approvals: enabled
 - Require conversation resolution: enabled
-- Enforce protections for administrators: enabled
+- Enforce protections for administrators: enabled by default
 - Force pushes: disabled
 - Branch deletion: disabled
 
@@ -113,6 +113,13 @@ Verification command:
 ```bash
 gh api repos/:owner/:repo/branches/main/protection
 ```
+
+Approved exception policy (timeboxed):
+
+- On personal repositories where owner-specific bypass cannot be scoped to a user, a temporary owner merge exception may set `enforce_admins=false`.
+- This exception requires a tracker item with: reason, approver (owner), activation date, and due date to re-evaluate.
+- The exception must be reviewed in monthly governance consistency review evidence until resolved.
+- Resolution options: restore `enforce_admins=true` or migrate to an organization repository and use user/team bypass allowances.
 
 ## Merge-By-Command Protocol
 
