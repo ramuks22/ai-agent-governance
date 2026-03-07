@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +37,7 @@ test('CLI help displays commands', () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /ai-governance <command>/);
   assert.match(result.stdout, /init/);
+  assert.match(result.stdout, /ci-check/);
   assert.match(result.stdout, /doctor/);
   assert.match(result.stdout, /upgrade/);
   assert.match(result.stdout, /rollback/);
@@ -46,6 +47,13 @@ test('CLI help displays commands', () => {
 test('check fails when governance config is missing', () => {
   const repo = setupRepo('gov-cli-check-missing');
   const result = run(['check'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Missing governance\.config\.json/);
+});
+
+test('ci-check fails when governance config is missing', () => {
+  const repo = setupRepo('gov-cli-ci-check-missing');
+  const result = run(['ci-check'], repo);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Missing governance\.config\.json/);
 });
@@ -109,6 +117,82 @@ test('wizard fails fast in non-interactive mode with fallback guidance', () => {
   assert.match(result.stderr, /requires an interactive TTY/);
   assert.match(result.stderr, /--preset node-npm-cjs/);
   assert.match(result.stderr, /--preset node-pnpm-monorepo/);
+});
+
+test('ci-check rejects invalid --gate values', () => {
+  const repo = setupRepo('gov-cli-ci-check-gate-invalid');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const result = run(['ci-check', '--gate', 'unknown'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid --gate value/);
+});
+
+test('--gate is rejected when command is not ci-check', () => {
+  const repo = setupRepo('gov-cli-gate-non-ci-check');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const result = run(['check', '--gate', 'all'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /--gate is only supported with --ci-check/);
+});
+
+test('ci-check runs preCommit then prePush and fails fast on first failure', () => {
+  const repo = setupRepo('gov-cli-ci-check-order');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+  writeFileSync(
+    path.join(repo, 'scripts', 'ci-gate-helper.mjs'),
+    `import { appendFileSync } from 'node:fs';\n` +
+    `const label = process.argv[2] || 'unknown';\n` +
+    `appendFileSync('.ci-order.log', \`\${label}\\n\`);\n` +
+    `if (label.includes('fail')) process.exit(1);\n`,
+    'utf8'
+  );
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.gates.preCommit = ['node scripts/ci-gate-helper.mjs precommit-pass'];
+  config.gates.prePush = ['node scripts/ci-gate-helper.mjs prepush-pass'];
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const pass = run(['ci-check', '--gate', 'all'], repo);
+  assert.equal(pass.status, 0, `${pass.stdout}\n${pass.stderr}`);
+  assert.deepEqual(readFileSync(path.join(repo, '.ci-order.log'), 'utf8').trim().split('\n'), [
+    'precommit-pass',
+    'prepush-pass',
+  ]);
+
+  rmSync(path.join(repo, '.ci-order.log'), { force: true });
+  config.gates.preCommit = ['node scripts/ci-gate-helper.mjs precommit-fail'];
+  config.gates.prePush = ['node scripts/ci-gate-helper.mjs prepush-should-not-run'];
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const failFast = run(['ci-check', '--gate', 'all'], repo);
+  assert.notEqual(failFast.status, 0);
+  assert.deepEqual(readFileSync(path.join(repo, '.ci-order.log'), 'utf8').trim().split('\n'), [
+    'precommit-fail',
+  ]);
+});
+
+test('ci-check recursion guard blocks self-referential gate commands', () => {
+  const repo = setupRepo('gov-cli-ci-check-recursive');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.gates.preCommit = ['npx --no-install ai-governance ci-check --gate precommit'];
+  config.gates.prePush = ['echo "should not run"'];
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['ci-check', '--gate', 'all'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Recursive ci-check command detected/);
 });
 
 test('invalid preset error lists all supported presets', () => {
@@ -226,4 +310,68 @@ test('doctor fails when managed block markers are corrupted', () => {
   assert.notEqual(doctor.status, 0);
   assert.match(doctor.stdout, /\[doctor\] FAIL managed-blocks/);
   assert.match(doctor.stdout, /AGENTS\.md/);
+});
+
+test('doctor fails ci-parity when no supported CI files exist', () => {
+  const repo = setupRepo('gov-cli-doctor-ci-parity-missing-files');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  rmSync(path.join(repo, '.github', 'workflows'), { recursive: true, force: true });
+
+  const doctor = run(['doctor'], repo);
+  assert.notEqual(doctor.status, 0);
+  assert.match(doctor.stdout, /\[doctor\] FAIL ci-parity/);
+  assert.match(doctor.stdout, /no supported CI files found/);
+});
+
+test('doctor fails ci-parity when CI files exist without ci-check invocation', () => {
+  const repo = setupRepo('gov-cli-doctor-ci-parity-no-invocation');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  writeFileSync(
+    path.join(repo, '.github', 'workflows', 'governance-ci.yml'),
+    'name: Governance CI\\non:\\n  push:\\n    branches: [main]\\njobs:\\n  governance:\\n    runs-on: ubuntu-latest\\n    steps:\\n      - run: npm run governance:check\\n',
+    'utf8'
+  );
+  rmSync(path.join(repo, '.github', 'workflows', 'governance-ci-reusable.yml'), { force: true });
+
+  const doctor = run(['doctor'], repo);
+  assert.notEqual(doctor.status, 0);
+  assert.match(doctor.stdout, /\[doctor\] FAIL ci-parity/);
+  assert.match(doctor.stdout, /none invoke ci-check/);
+});
+
+test('doctor ci-parity recognizes governance-ci-reusable workflow references', () => {
+  const repo = setupRepo('gov-cli-doctor-ci-parity-reusable-reference');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const directPath = path.join(repo, '.github', 'workflows', 'governance-ci.yml');
+  const directContent = readFileSync(directPath, 'utf8');
+  writeFileSync(
+    directPath,
+    directContent.replace('npx --no-install ai-governance ci-check --gate all', 'npm run -s test'),
+    'utf8'
+  );
+
+  const reusablePath = path.join(repo, '.github', 'workflows', 'governance-ci-reusable.yml');
+  const reusableContent = readFileSync(reusablePath, 'utf8');
+  writeFileSync(
+    reusablePath,
+    reusableContent.replace('ci-check --gate all', 'test'),
+    'utf8'
+  );
+
+  writeFileSync(
+    path.join(repo, '.github', 'workflows', 'caller.yml'),
+    'name: Governance\\non:\\n  pull_request:\\n    branches: [main]\\njobs:\\n  governance:\\n    uses: ramuks22/ai-agent-governance/.github/workflows/governance-ci-reusable.yml@v1.1.0\\n    with:\\n      package_version: \"1.1.0\"\\n',
+    'utf8'
+  );
+
+  const doctor = run(['doctor'], repo);
+  assert.notEqual(doctor.status, 0);
+  assert.match(doctor.stdout, /\[doctor\] PASS ci-parity/);
+  assert.match(doctor.stdout, /caller\.yml/);
 });

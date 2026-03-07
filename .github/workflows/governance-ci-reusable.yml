@@ -1,0 +1,38 @@
+name: Governance CI Reusable
+
+on:
+  workflow_call:
+    inputs:
+      package_version:
+        description: Pinned @ramuks22/ai-agent-governance package version (for example 1.1.0)
+        required: true
+        type: string
+      node_version:
+        description: Node version for CI runtime
+        required: false
+        default: '20'
+        type: string
+      install_command:
+        description: Dependency install command for your package manager
+        required: false
+        default: 'npm ci'
+        type: string
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install dependencies
+        run: ${{ inputs.install_command }}
+
+      - name: Governance Check
+        run: npx --yes @ramuks22/ai-agent-governance@${{ inputs.package_version }} check
+
+      - name: CI Check (pre-commit + pre-push gates)
+        run: npx --yes @ramuks22/ai-agent-governance@${{ inputs.package_version }} ci-check --gate all
