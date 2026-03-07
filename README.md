@@ -10,27 +10,36 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
 - 🔀 Merge-by-command protocol with auditability
 - 🔄 CI parity for local gates
 
-## 5-Minute Quickstart
+## 5-Minute Quickstart (Package-First)
 
-1. **Copy files to your repo** or clone this framework
-
-2. **Install dependencies and hooks:**
+1. **Install the framework package in your repo:**
    ```bash
-   npm install
-   node scripts/install-githooks.mjs
+   npm install -D @ramuks22/ai-agent-governance
    ```
 
-3. **Create config and tracker:**
+2. **Initialize governance artifacts:**
    ```bash
-   npm run governance:init
+   npx @ramuks22/ai-agent-governance init --preset node-npm-cjs --hook-strategy auto
    ```
 
-4. **Verify setup:**
+3. **Verify setup:**
    ```bash
-   npm run governance:check
+   npx @ramuks22/ai-agent-governance check
+   npx @ramuks22/ai-agent-governance doctor
    ```
 
-5. **Start working!** Open `governance.config.json` to customize gates, tracker path, and ID rules.
+4. **Start working!** Open `governance.config.json` to customize gates, tracker path, and ID rules.
+
+### Legacy/Manual Mode (Fallback)
+
+If you cannot use package mode yet, you can still use the manual path in this repository:
+
+```bash
+npm install
+npm run governance:init
+node scripts/install-githooks.mjs
+npm run governance:check
+```
 
 ## Source of Truth Map
 
@@ -221,9 +230,16 @@ The included workflow:
 | Script | Description |
 |--------|-------------|
 | `npm run governance:check` | Validate config, hooks, and tracker |
+| `npm run governance:doctor` | Detailed diagnostics for config, hooks, tracker, and manifest |
 | `npm run governance:init` | Create config and tracker from templates |
 | `npm run gate:precommit` | Run pre-commit gates manually |
 | `npm run gate:prepush` | Run pre-push gates manually |
+
+CLI equivalent (package mode):
+
+- `npx @ramuks22/ai-agent-governance init`
+- `npx @ramuks22/ai-agent-governance check`
+- `npx @ramuks22/ai-agent-governance doctor`
 
 Note: The `lint`, `format:check`, and `build` scripts in `package.json` are placeholders. Replace them with your project's real tooling.
 
@@ -232,6 +248,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
+- AG-GOV-003 v1.0 delivers Stage 0-2 only (decision doc + package CLI + installer idempotency). Stage 3+ remains roadmap.
 
 ## License
 

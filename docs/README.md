@@ -2,6 +2,16 @@
 
 This folder contains the governance framework documentation.
 
+## Installable Distribution (AG-GOV-003 v1.0)
+
+Package-first commands:
+
+- `npx @ramuks22/ai-agent-governance init`
+- `npx @ramuks22/ai-agent-governance check`
+- `npx @ramuks22/ai-agent-governance doctor`
+
+Legacy/manual mode remains supported as fallback.
+
 ## Source of Truth
 
 - `docs/development/delivery-governance.md` - delivery rules and quality gates
@@ -23,3 +33,4 @@ This folder contains the governance framework documentation.
 ## Examples
 
 - `docs/examples/AG-GOV-004-workshop.md` - canonical workshop example
+- `docs/requirements/AG-GOV-003/workshop.md` - workshop artifact for installable distribution v1.0 scope

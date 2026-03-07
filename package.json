@@ -1,15 +1,19 @@
 {
-  "name": "ai-agent-governance",
+  "name": "@ramuks22/ai-agent-governance",
   "version": "1.1.0",
   "description": "AI Agent Governance Framework: rules, workflows, and enforcement for AI-assisted development",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "ai-governance": "bin/ai-governance.mjs"
+  },
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "test": "node --test scripts/__tests__/*.test.mjs",
     "governance:check": "node scripts/governance-check.mjs",
+    "governance:doctor": "node scripts/governance-check.mjs --doctor",
     "governance:init": "node scripts/governance-check.mjs --init",
     "gate:precommit": "node scripts/gates.mjs pre-commit",
     "gate:prepush": "node scripts/gates.mjs pre-push",

@@ -4,4 +4,5 @@ coverage/
 dist/
 .env
 .env.*
-plans/
+plans/*
+!plans/ag-gov-003-stage0-decision-doc.md
