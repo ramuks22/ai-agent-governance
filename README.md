@@ -21,6 +21,10 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
    ```bash
    npx @ramuks22/ai-agent-governance init --preset node-npm-cjs --hook-strategy auto
    ```
+   Or run guided selection:
+   ```bash
+   npx @ramuks22/ai-agent-governance init --wizard --hook-strategy auto
+   ```
 
 3. **Verify setup:**
    ```bash
@@ -35,6 +39,14 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
    npx @ramuks22/ai-agent-governance upgrade --dry-run --patch
    npx @ramuks22/ai-agent-governance rollback --to latest --force
    ```
+
+### Preset Matrix (Stage 4)
+
+- `node-npm-cjs` - npm single-package CJS projects
+- `node-npm-esm` - npm single-package ESM projects
+- `node-pnpm-monorepo` - pnpm monorepo/workspace projects
+- `node-yarn-workspaces` - yarn workspace projects
+- `generic` - strict fail-closed placeholders (`noop.mjs`) for lint/format/test/build until you configure real commands
 
 ### Legacy/Manual Mode (Fallback)
 
@@ -272,6 +284,7 @@ The included workflow:
 CLI equivalent (package mode):
 
 - `npx @ramuks22/ai-agent-governance init`
+- `npx @ramuks22/ai-agent-governance init --wizard`
 - `npx @ramuks22/ai-agent-governance check`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
@@ -292,7 +305,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 Stage 0-3 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling). Stage 4+ remains roadmap.
+- AG-GOV-003 Stage 0-3 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling). Stage 4 is in progress via AG-GOV-024/025/026; Stage 5+ remains roadmap.
 
 ## License
 

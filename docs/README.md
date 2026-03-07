@@ -2,11 +2,12 @@
 
 This folder contains the governance framework documentation.
 
-## Installable Distribution (AG-GOV-003 Stage 3)
+## Installable Distribution (AG-GOV-003 Stage 4)
 
 Package-first commands:
 
 - `npx @ramuks22/ai-agent-governance init`
+- `npx @ramuks22/ai-agent-governance init --wizard`
 - `npx @ramuks22/ai-agent-governance check`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
@@ -38,3 +39,4 @@ Legacy/manual mode remains supported as fallback.
 - `docs/examples/AG-GOV-004-workshop.md` - canonical workshop example
 - `docs/requirements/AG-GOV-003/workshop.md` - workshop artifact for installable distribution v1.0 scope
 - `docs/requirements/AG-GOV-003-stage3/workshop.md` - shared workshop artifact for Stage 3 upgrade/rollback/corruption handling
+- `docs/requirements/AG-GOV-003-stage4/workshop.md` - shared workshop artifact for Stage 4 presets/wizard delivery
