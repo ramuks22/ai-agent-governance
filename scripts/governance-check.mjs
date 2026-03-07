@@ -7,11 +7,17 @@ import {
   chmodSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import readline from 'node:readline/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
 import semver from 'semver';
+import {
+  resolveWizardPreset,
+  supportedWizardMatrixText,
+  wizardFallbackExamples,
+} from './wizard.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
@@ -65,6 +71,44 @@ const PRESETS = {
       minVersion: '20.0.0',
     },
   },
+  'node-pnpm-monorepo': {
+    configVersion: '1.0',
+    tracker: {
+      path: TRACKER_PATH,
+      idPattern: '^[A-Z]+-[A-Z]+-\\d{3}$',
+      allowedPrefixes: ['AG'],
+    },
+    gates: {
+      preCommit: ['pnpm run governance:check', 'pnpm run format:check', 'pnpm run lint'],
+      prePush: ['pnpm run governance:check', 'pnpm run test', 'pnpm run build'],
+    },
+    branchProtection: {
+      blockDirectPush: ['main', 'master'],
+      branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
+    },
+    node: {
+      minVersion: '20.0.0',
+    },
+  },
+  'node-yarn-workspaces': {
+    configVersion: '1.0',
+    tracker: {
+      path: TRACKER_PATH,
+      idPattern: '^[A-Z]+-[A-Z]+-\\d{3}$',
+      allowedPrefixes: ['AG'],
+    },
+    gates: {
+      preCommit: ['yarn run governance:check', 'yarn run format:check', 'yarn run lint'],
+      prePush: ['yarn run governance:check', 'yarn run test', 'yarn run build'],
+    },
+    branchProtection: {
+      blockDirectPush: ['main', 'master'],
+      branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
+    },
+    node: {
+      minVersion: '20.0.0',
+    },
+  },
   generic: {
     configVersion: '1.0',
     tracker: {
@@ -73,8 +117,16 @@ const PRESETS = {
       allowedPrefixes: ['AG'],
     },
     gates: {
-      preCommit: ['npm run -s governance:check', 'npm run -s format:check', 'npm run -s lint'],
-      prePush: ['npm run -s governance:check', 'npm run -s test', 'npm run -s build'],
+      preCommit: [
+        'npm run -s governance:check',
+        `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs format:check`,
+        `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs lint`,
+      ],
+      prePush: [
+        'npm run -s governance:check',
+        `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs test`,
+        `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs build`,
+      ],
     },
     branchProtection: {
       blockDirectPush: ['main', 'master'],
@@ -85,6 +137,7 @@ const PRESETS = {
     },
   },
 };
+const PRESET_NAMES = Object.keys(PRESETS);
 
 const ARTIFACT_FILES = [
   'AGENTS.md',
@@ -297,6 +350,7 @@ function isGitRepo() {
 
 function parseArgs(argv) {
   const isCI = process.env.CI === 'true';
+  let presetProvided = false;
   const options = {
     mode: 'check',
     skipHooks: isCI,
@@ -305,6 +359,7 @@ function parseArgs(argv) {
     patch: false,
     rollbackTo: null,
     preset: 'node-npm-cjs',
+    wizard: false,
     hookStrategy: 'auto',
     configPath: process.env.GOVERNANCE_CONFIG || CONFIG_PATH,
   };
@@ -329,11 +384,14 @@ function parseArgs(argv) {
       options.rollbackTo = arg.split('=')[1];
     }
     else if (arg === '--help' || arg === '-h') options.mode = 'help';
+    else if (arg === '--wizard') options.wizard = true;
     else if (arg === '--preset' && argv[i + 1]) {
       options.preset = argv[i + 1];
+      presetProvided = true;
       i += 1;
     } else if (arg.startsWith('--preset=')) {
       options.preset = arg.split('=')[1];
+      presetProvided = true;
     } else if (arg === '--hook-strategy' && argv[i + 1]) {
       options.hookStrategy = argv[i + 1];
       i += 1;
@@ -344,8 +402,20 @@ function parseArgs(argv) {
     }
   }
 
+  if (options.mode === 'help') {
+    return options;
+  }
+
   if (!PRESETS[options.preset]) {
-    fail(`✖ Invalid preset '${options.preset}'. Allowed: ${Object.keys(PRESETS).join(', ')}`);
+    fail(`✖ Invalid preset '${options.preset}'. Allowed: ${PRESET_NAMES.join(', ')}`);
+  }
+
+  if (options.wizard && presetProvided) {
+    fail('✖ --wizard and --preset are mutually exclusive. Choose one mode.');
+  }
+
+  if (options.wizard && options.mode !== 'init') {
+    fail('✖ --wizard is only supported with --init.');
   }
 
   if (!['auto', 'core-hooks', 'git-hooks'].includes(options.hookStrategy)) {
@@ -366,7 +436,8 @@ Modes:
   --rollback            Restore artifacts from backup snapshot
 
 Options:
-  --preset <name>       Preset config: node-npm-cjs|node-npm-esm|generic
+  --preset <name>       Preset config: node-npm-cjs|node-npm-esm|node-pnpm-monorepo|node-yarn-workspaces|generic
+  --wizard              Interactive preset selection for init (mutually exclusive with --preset)
   --hook-strategy <s>   Hook install strategy: auto|core-hooks|git-hooks
   --dry-run             Print planned actions without writing files
   --force               Overwrite conflicts or bypass rollback clean-tree check
@@ -377,10 +448,82 @@ Options:
 
 Examples:
   node scripts/governance-check.mjs --init --preset node-npm-cjs --hook-strategy auto
+  node scripts/governance-check.mjs --init --wizard --hook-strategy auto
   node scripts/governance-check.mjs --upgrade --dry-run --patch
   node scripts/governance-check.mjs --rollback --to latest --force
   node scripts/governance-check.mjs --doctor
 `);
+}
+
+function ensureWizardTTY() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    fail(`✖ --wizard requires an interactive TTY.\nUse one of:\n${wizardFallbackExamples()}`);
+  }
+}
+
+async function promptWizardChoice(rl, title, options) {
+  info(`[governance:wizard] ${title}`);
+  options.forEach((option, index) => {
+    info(`  ${index + 1}) ${option}`);
+  });
+
+  while (true) {
+    const answer = (await rl.question(`Choose [1-${options.length}]: `)).trim();
+    const choice = Number.parseInt(answer, 10);
+    if (Number.isInteger(choice) && choice >= 1 && choice <= options.length) {
+      return options[choice - 1];
+    }
+    info(`[governance:wizard] Invalid choice '${answer}'. Enter a number from 1 to ${options.length}.`);
+  }
+}
+
+function failUnsupportedWizardCombination(resolution) {
+  fail(
+    `✖ ${resolution.reason}\n` +
+    `Supported combinations:\n${supportedWizardMatrixText()}\n` +
+    `Use one of:\n${wizardFallbackExamples()}`
+  );
+}
+
+async function resolvePresetFromWizard() {
+  ensureWizardTTY();
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    const packageManager = await promptWizardChoice(rl, 'Select package manager:', [
+      'npm',
+      'pnpm',
+      'yarn',
+      'generic',
+    ]);
+
+    if (packageManager === 'generic') {
+      return 'generic';
+    }
+
+    let moduleType = '';
+    if (packageManager === 'npm') {
+      moduleType = await promptWizardChoice(rl, 'Select module type (npm only):', ['cjs', 'esm']);
+    }
+
+    const layout = await promptWizardChoice(rl, 'Select repository layout:', [
+      'single-package',
+      'monorepo/workspaces',
+    ]);
+
+    const resolution = resolveWizardPreset({ packageManager, moduleType, layout });
+    if (!resolution.ok) {
+      failUnsupportedWizardCombination(resolution);
+    }
+
+    return resolution.preset;
+  } finally {
+    rl.close();
+  }
 }
 
 function detectHookManagers() {
@@ -847,10 +990,17 @@ function writeUpgradePatch(patchPath, actions, fromVersion, toVersion) {
   writeFileSync(destination, `${lines.join('\n').replace(/\n+$/g, '')}\n`, 'utf8');
 }
 
-function runInit(options) {
+async function runInit(options) {
+  let runtimeOptions = { ...options };
+  if (options.wizard) {
+    const wizardPreset = await resolvePresetFromWizard();
+    runtimeOptions = { ...options, preset: wizardPreset };
+    info(`[governance:init] Wizard selected preset: ${runtimeOptions.preset}`);
+  }
+
   const manifest = readManifest();
   const conflictState = detectHookManagers();
-  const managedEntries = collectManagedItems(options);
+  const managedEntries = collectManagedItems(runtimeOptions);
   const actions = [];
   const conflicts = [];
 
@@ -863,7 +1013,7 @@ function runInit(options) {
     }
   }
 
-  if (options.force) {
+  if (runtimeOptions.force) {
     for (const action of actions) {
       if (action.action === 'conflict' || action.action === 'corrupt' || action.action === 'outdated') {
         action.action = 'update';
@@ -876,7 +1026,7 @@ function runInit(options) {
     info(`- ${action.action.padEnd(12)} ${action.relPath}`);
   }
 
-  if (conflicts.length && !options.force) {
+  if (conflicts.length && !runtimeOptions.force) {
     info('[governance:init] Conflicts detected (use --force to overwrite managed files):');
     for (const conflict of conflicts) {
       const expected = conflict.status.expectedChecksum?.slice(0, 8) || 'n/a';
@@ -885,9 +1035,9 @@ function runInit(options) {
     }
   }
 
-  if (options.dryRun) {
+  if (runtimeOptions.dryRun) {
     info('[governance:init] Dry run complete. No files were written.');
-    if (conflicts.length && !options.force) process.exit(1);
+    if (conflicts.length && !runtimeOptions.force) process.exit(1);
     process.exit(0);
   }
 
@@ -900,11 +1050,11 @@ function runInit(options) {
     wroteManagedFiles = true;
   }
 
-  const gitHookWrites = writeGitHooks(options);
-  const coreHooksConfigured = configureHooksPath(options, conflictState);
+  const gitHookWrites = writeGitHooks(runtimeOptions);
+  const coreHooksConfigured = configureHooksPath(runtimeOptions, conflictState);
 
-  const manifestObject = buildManifest(options, managedEntries, {
-    hookConflictDetected: conflictState.hasConflict && options.hookStrategy === 'auto' && !coreHooksConfigured,
+  const manifestObject = buildManifest(runtimeOptions, managedEntries, {
+    hookConflictDetected: conflictState.hasConflict && runtimeOptions.hookStrategy === 'auto' && !coreHooksConfigured,
     coreHooksConfigured,
   });
   const shouldWriteManifest = manifestComparable(manifest) !== manifestComparable(manifestObject);
@@ -920,7 +1070,7 @@ function runInit(options) {
     for (const file of gitHookWrites) info(`  - ${file}`);
   }
 
-  if (conflicts.length && !options.force) {
+  if (conflicts.length && !runtimeOptions.force) {
     fail('✖ Initialization completed with conflicts. Review output and rerun with --force if appropriate.');
   }
 
@@ -1314,31 +1464,35 @@ function runDoctor(options) {
   info('[doctor] All checks passed.');
 }
 
-const options = parseArgs(process.argv.slice(2));
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
 
-if (options.mode === 'help') {
-  printHelp();
-  process.exit(0);
+  if (options.mode === 'help') {
+    printHelp();
+    process.exit(0);
+  }
+
+  if (options.mode === 'init') {
+    await runInit(options);
+    process.exit(0);
+  }
+
+  if (options.mode === 'doctor') {
+    runDoctor(options);
+    process.exit(0);
+  }
+
+  if (options.mode === 'upgrade') {
+    runUpgrade(options);
+    process.exit(0);
+  }
+
+  if (options.mode === 'rollback') {
+    runRollback(options);
+    process.exit(0);
+  }
+
+  runCheck(options);
 }
 
-if (options.mode === 'init') {
-  runInit(options);
-  process.exit(0);
-}
-
-if (options.mode === 'doctor') {
-  runDoctor(options);
-  process.exit(0);
-}
-
-if (options.mode === 'upgrade') {
-  runUpgrade(options);
-  process.exit(0);
-}
-
-if (options.mode === 'rollback') {
-  runRollback(options);
-  process.exit(0);
-}
-
-runCheck(options);
+await main();

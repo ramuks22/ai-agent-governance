@@ -40,6 +40,7 @@ test('CLI help displays commands', () => {
   assert.match(result.stdout, /doctor/);
   assert.match(result.stdout, /upgrade/);
   assert.match(result.stdout, /rollback/);
+  assert.match(result.stdout, /--wizard/);
 });
 
 test('check fails when governance config is missing', () => {
@@ -64,6 +65,57 @@ test('init + check + doctor succeeds in fresh repo', () => {
   assert.equal(doctor.status, 0, `${doctor.stdout}\n${doctor.stderr}`);
   assert.match(doctor.stdout, /\[doctor\] PASS config-file/);
   assert.match(doctor.stdout, /\[doctor\] PASS hooks/);
+});
+
+test('init accepts pnpm and yarn workspace presets', () => {
+  const pnpmRepo = setupRepo('gov-cli-pnpm-preset');
+  const pnpmInit = run(['init', '--preset', 'node-pnpm-monorepo', '--hook-strategy', 'auto'], pnpmRepo);
+  assert.equal(pnpmInit.status, 0, `${pnpmInit.stdout}\n${pnpmInit.stderr}`);
+  const pnpmConfig = JSON.parse(readFileSync(path.join(pnpmRepo, 'governance.config.json'), 'utf8'));
+  assert.equal(pnpmConfig.gates.preCommit[0], 'pnpm run governance:check');
+  assert.equal(pnpmConfig.gates.prePush[0], 'pnpm run governance:check');
+
+  const yarnRepo = setupRepo('gov-cli-yarn-preset');
+  const yarnInit = run(['init', '--preset', 'node-yarn-workspaces', '--hook-strategy', 'auto'], yarnRepo);
+  assert.equal(yarnInit.status, 0, `${yarnInit.stdout}\n${yarnInit.stderr}`);
+  const yarnConfig = JSON.parse(readFileSync(path.join(yarnRepo, 'governance.config.json'), 'utf8'));
+  assert.equal(yarnConfig.gates.preCommit[0], 'yarn run governance:check');
+  assert.equal(yarnConfig.gates.prePush[0], 'yarn run governance:check');
+});
+
+test('generic preset is fail-closed with placeholder commands', () => {
+  const repo = setupRepo('gov-cli-generic-preset');
+  const init = run(['init', '--preset', 'generic', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const config = JSON.parse(readFileSync(path.join(repo, 'governance.config.json'), 'utf8'));
+  assert.match(config.gates.preCommit[1], /scripts\/noop\.mjs format:check/);
+  assert.match(config.gates.preCommit[2], /scripts\/noop\.mjs lint/);
+  assert.match(config.gates.prePush[1], /scripts\/noop\.mjs test/);
+  assert.match(config.gates.prePush[2], /scripts\/noop\.mjs build/);
+});
+
+test('wizard and preset cannot be used together', () => {
+  const repo = setupRepo('gov-cli-wizard-and-preset');
+  const result = run(['init', '--wizard', '--preset', 'node-npm-cjs'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /mutually exclusive/);
+});
+
+test('wizard fails fast in non-interactive mode with fallback guidance', () => {
+  const repo = setupRepo('gov-cli-wizard-notty');
+  const result = run(['init', '--wizard'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /requires an interactive TTY/);
+  assert.match(result.stderr, /--preset node-npm-cjs/);
+  assert.match(result.stderr, /--preset node-pnpm-monorepo/);
+});
+
+test('invalid preset error lists all supported presets', () => {
+  const repo = setupRepo('gov-cli-invalid-preset');
+  const result = run(['init', '--preset', 'unknown-preset'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Allowed: node-npm-cjs, node-npm-esm, node-pnpm-monorepo, node-yarn-workspaces, generic/);
 });
 
 test('init rerun is idempotent when managed files are unchanged', () => {
