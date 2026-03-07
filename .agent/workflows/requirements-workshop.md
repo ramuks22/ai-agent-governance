@@ -10,14 +10,43 @@ Use this workflow to convert a raw feature idea into traceable requirements befo
 
 ## When Required
 
-Run this workflow for:
+Primary decision mechanism (authoritative):
+
+### Quick Applicability Decision (<=60s)
+
+1. Does this work change runtime behavior for users or integrating systems?
+2. Does this work change an API contract or data model?
+3. Does this work change security, privacy, compliance, or legal obligations?
+4. Does this work require cross-team coordination or dependency changes across services or repositories?
+
+Decision rules:
+
+- If any answer is `Yes`, workshop is required.
+- If all answers are `No` and the change is one of the exempt categories below, workshop is not required.
+- If uncertain, workshop is required.
+
+### Exempt Categories (Use Exact Terms)
+
+- documentation-only changes
+- dependency bumps without behavior change
+- cosmetic refactors or chore-only changes
+
+### Applicability Evidence (Required)
+
+- Add this line to the PR body:
+  - `Applicability: Required|Not Required — Reason: <one line>`
+- The tracker evidence column must reference the PR containing this line.
+
+### Supporting Category Examples (Secondary Guidance)
+
+Required examples:
 
 - net-new features
 - behavior-changing enhancements
 - cross-team, API, or data model changes
 - security, privacy, compliance, or legal-impacting changes
 
-You may skip this workflow for:
+Not-required examples:
 
 - documentation-only changes
 - dependency bumps without behavior change

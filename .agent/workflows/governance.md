@@ -6,14 +6,14 @@ This workflow governs all contributions (human + AI).
 
 Before each major step, verify:
 
-| Step | Check |
-|------|-------|
-| **New Feature/Issue** | Investigate → Create Tracker Item → Fix (Strict Sequence) |
-| **Before coding** | Is tracker ID assigned? Is `docs/tracker.md` phase/state updated to active work? |
-| **Feature-level gate** | Is requirements workshop complete and linked (or approved hotfix exception documented)? |
-| **Before commit** | Are all changed files consistent with tracker scope? |
-| **Before push** | Did gates pass? Is tracker still accurate? |
-| **Before merge** | Is tracker ready for finalization (`Merge` + `Complete`)? Are docs updated? |
+| Step                   | Check                                                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **New Feature/Issue**  | Investigate → Create Tracker Item → Fix (Strict Sequence)                                                                   |
+| **Before coding**      | Is tracker ID assigned? Is `docs/tracker.md` phase/state updated to active work? Is quick applicability decision completed? |
+| **Feature-level gate** | If applicability is `Required`, is requirements workshop complete and linked (or approved hotfix exception documented)?     |
+| **Before commit**      | Are all changed files consistent with tracker scope?                                                                        |
+| **Before push**        | Did gates pass? Is tracker still accurate?                                                                                  |
+| **Before merge**       | Is tracker ready for finalization (`Merge` + `Complete`)? Are docs updated?                                                 |
 
 > ⚠️ **If any check fails**: STOP and resolve before proceeding.
 
@@ -28,9 +28,10 @@ Before each major step, verify:
 
 1. Every change maps to a tracker ID or an explicit exception.
 2. Update tracker phase/state when work starts and finishes.
-3. For feature-level work, complete the requirements workshop before implementation.
-4. Use local gates (pre-commit + pre-push).
-5. No direct pushes to `main`.
+3. Before coding, complete the quick applicability decision and record PR evidence.
+4. If applicability is `Required`, complete the requirements workshop before implementation.
+5. Use local gates (pre-commit + pre-push).
+6. No direct pushes to `main`.
 
 ## Requirements Workshop Gate
 
@@ -40,18 +41,32 @@ For feature-level work, run `.agent/workflows/requirements-workshop.md` and stor
 
 ### Applicability
 
-Required for:
+Primary rule (<=60 seconds):
+
+1. Answer the four yes/no checks in `.agent/workflows/requirements-workshop.md`.
+2. If any answer is `Yes`, workshop is required.
+3. If all answers are `No` and the change is an exempt category, workshop is not required.
+4. If uncertain, workshop is required.
+
+Required PR evidence:
+
+- `Applicability: Required|Not Required — Reason: <one line>`
+- Tracker evidence must reference the PR containing this line.
+
+Supporting category examples (secondary guidance):
+
+Required examples:
 
 - net-new features
 - behavior-changing enhancements
 - cross-team, API, or data model changes
 - security, privacy, compliance, or legal-impacting work
 
-Not required for:
+Not-required examples:
 
-- docs-only changes
+- documentation-only changes
 - dependency bumps without behavior change
-- cosmetic refactors and chore-only updates
+- cosmetic refactors or chore-only changes
 
 ### Hotfix Exception
 
@@ -110,13 +125,13 @@ command message.
 - [ ] For feature-level work, workshop artifact is linked and requirements are traceable
 - [ ] Tracker updated with PR reference
 - [ ] Tracker phase/state set to `Merge / Complete` only after PR is merged to `main`
-  (or explicit approved exception)
+      (or explicit approved exception)
 
 ## Violations (Stop Conditions)
 
-| Violation | Outcome |
-| --- | --- |
-| Direct push to main | BLOCK |
-| Missing tracker ID (no exception) | BLOCK |
-| Use `--no-verify` after failed push without approval | BLOCK |
-| Merge without merge-by-command evidence when required | BLOCK |
+| Violation                                             | Outcome |
+| ----------------------------------------------------- | ------- |
+| Direct push to main                                   | BLOCK   |
+| Missing tracker ID (no exception)                     | BLOCK   |
+| Use `--no-verify` after failed push without approval  | BLOCK   |
+| Merge without merge-by-command evidence when required | BLOCK   |
