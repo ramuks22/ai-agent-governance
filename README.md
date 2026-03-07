@@ -30,6 +30,12 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
 
 4. **Start working!** Open `governance.config.json` to customize gates, tracker path, and ID rules.
 
+5. **Upgrade or rollback managed artifacts when needed:**
+   ```bash
+   npx @ramuks22/ai-agent-governance upgrade --dry-run --patch
+   npx @ramuks22/ai-agent-governance rollback --to latest --force
+   ```
+
 ### Legacy/Manual Mode (Fallback)
 
 If you cannot use package mode yet, you can still use the manual path in this repository:
@@ -97,6 +103,7 @@ The framework is driven by `governance.config.json` and validated against `gover
 | `gates.preCommit` | Commands to run on pre-commit |
 | `gates.prePush` | Commands to run on pre-push |
 | `branchProtection.blockDirectPush` | Branches that block direct pushes |
+| `branchProtection.branchNamePattern` | Regex for allowed branch names |
 | `node.minVersion` | Minimum required Node.js version |
 
 ### Example Config
@@ -114,13 +121,38 @@ The framework is driven by `governance.config.json` and validated against `gover
     "prePush": ["npm run -s test", "npm run -s build"]
   },
   "branchProtection": {
-    "blockDirectPush": ["main", "master"]
+    "blockDirectPush": ["main", "master"],
+    "branchNamePattern": "^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$"
   },
   "node": {
     "minVersion": "20.0.0"
   }
 }
 ```
+
+### Branch Naming Enforcement
+
+Pre-push checks enforce branch names against `branchProtection.branchNamePattern`.
+
+Valid examples:
+
+- `feat/add-upgrade-command`
+- `fix/branch-protection-regression`
+- `hotfix/prod-outage-credentials`
+- `docs/update-workshop-guidance`
+- `chore/cleanup-config-defaults`
+- `refactor/simplify-gate-parser`
+- `test/add-rollback-cases`
+- `perf/faster-secret-scan`
+- `build/update-node-matrix`
+- `ci/governance-workflow-tidy`
+- `revert/rollback-branch-policy-change`
+- `release/v1.2.0`
+
+Invalid examples:
+
+- `codex/ag-gov-017`
+- `spike/try-new-hook-runner`
 
 ### Tracker ID Presets
 
@@ -240,6 +272,16 @@ CLI equivalent (package mode):
 - `npx @ramuks22/ai-agent-governance init`
 - `npx @ramuks22/ai-agent-governance check`
 - `npx @ramuks22/ai-agent-governance doctor`
+- `npx @ramuks22/ai-agent-governance upgrade`
+- `npx @ramuks22/ai-agent-governance rollback`
+
+### Stage 3 Upgrade/Rollback Notes
+
+- `upgrade` is conflict-aware by default and writes no files when conflicts are found.
+- Use `--force` to overwrite conflicts; a backup snapshot is created before writes.
+- Use `--patch` (or `--patch=<path>`) to write deterministic patch output for review.
+- `rollback` restores files from `.governance/backups/index.json` (latest by default or `--to <backup-id>`).
+- Managed-block strategy applies to `.md/.yml/.yaml/.sh` and hook files; `.json` remains full-file checksum-managed.
 
 Note: The `lint`, `format:check`, and `build` scripts in `package.json` are placeholders. Replace them with your project's real tooling.
 
@@ -248,7 +290,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 v1.0 delivers Stage 0-2 only (decision doc + package CLI + installer idempotency). Stage 3+ remains roadmap.
+- AG-GOV-003 Stage 0-3 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling). Stage 4+ remains roadmap.
 
 ## License
 

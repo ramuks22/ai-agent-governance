@@ -24,7 +24,8 @@
     "blockDirectPush": [
       "main",
       "master"
-    ]
+    ],
+    "branchNamePattern": "^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$"
   },
   "node": {
     "minVersion": "20.0.0"

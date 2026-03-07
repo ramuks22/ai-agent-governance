@@ -66,6 +66,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "branchNamePattern": {
+          "type": "string"
         }
       }
     },

@@ -14,12 +14,16 @@ Commands:
   init      Initialize governance artifacts and hooks
   check     Validate governance setup
   doctor    Print detailed governance diagnostics
+  upgrade   Upgrade managed governance artifacts safely
+  rollback  Restore governance artifacts from backup
   help      Show this help message
 
 Examples:
   npx @ramuks22/ai-agent-governance init --preset node-npm-cjs --hook-strategy auto
   npx @ramuks22/ai-agent-governance check
   npx @ramuks22/ai-agent-governance doctor
+  npx @ramuks22/ai-agent-governance upgrade --dry-run
+  npx @ramuks22/ai-agent-governance rollback --to latest --force
 `);
 }
 
@@ -42,6 +46,8 @@ if (!command || command === 'help' || command === '--help' || command === '-h') 
 if (command === 'init') runCheckScript(['--init', ...rest]);
 if (command === 'check') runCheckScript(rest);
 if (command === 'doctor') runCheckScript(['--doctor', ...rest]);
+if (command === 'upgrade') runCheckScript(['--upgrade', ...rest]);
+if (command === 'rollback') runCheckScript(['--rollback', ...rest]);
 
 console.error(`Unknown command: ${command}`);
 printHelp();
