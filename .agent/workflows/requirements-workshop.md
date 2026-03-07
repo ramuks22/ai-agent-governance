@@ -106,12 +106,11 @@ Requirements must trace back to concerns raised in `# Simulated Workshop Output`
 
 If urgent work must start before workshop completion:
 
-1. Document exception reason in tracker or PR.
-2. Record approvals from:
-   - delivery owner (tech lead or engineering manager)
-   - governance maintainer
-3. Record a due date for retroactive workshop completion.
-4. Complete and link the workshop artifact within 2 business days.
+- Capture the exception with `Reason`, `Approvers`, `Due Date (YYYY-MM-DD)`, and
+  `Retroactive Completion Evidence`.
+- Complete and link the workshop artifact within 2 business days.
+- Normative contract and required field definitions are in
+  `.agent/workflows/governance.md` -> `Requirements Workshop Gate` -> `Hotfix Exception`.
 
 ## Completion Criteria
 

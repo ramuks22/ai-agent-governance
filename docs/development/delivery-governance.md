@@ -39,10 +39,11 @@ Applicability evidence (required):
 
 Hotfix exception:
 
-1. Document exception reason in tracker or PR.
-2. Record approvals from delivery owner and governance maintainer.
-3. Record due date for retroactive workshop completion.
-4. Complete and link workshop artifact within 2 business days.
+- Capture the exception with `Reason`, `Approvers`, `Due Date (YYYY-MM-DD)`, and
+  `Retroactive Completion Evidence`.
+- Complete and link the workshop artifact within 2 business days.
+- Normative contract and required field definitions are in
+  `.agent/workflows/governance.md` -> `Requirements Workshop Gate` -> `Hotfix Exception`.
 
 ## Quality Gates (Local + CI)
 
