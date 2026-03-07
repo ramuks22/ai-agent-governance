@@ -1,0 +1,31 @@
+{
+  "configVersion": "1.0",
+  "tracker": {
+    "path": "docs/tracker.md",
+    "idPattern": "^[A-Z]+-[A-Z]+-\\d{3}$",
+    "allowedPrefixes": [
+      "AG"
+    ]
+  },
+  "gates": {
+    "preCommit": [
+      "npm run -s governance:check",
+      "npm run -s format:check",
+      "npm run -s lint"
+    ],
+    "prePush": [
+      "npm run -s governance:check",
+      "npm test",
+      "npm run -s build"
+    ]
+  },
+  "branchProtection": {
+    "blockDirectPush": [
+      "main",
+      "master"
+    ]
+  },
+  "node": {
+    "minVersion": "20.0.0"
+  }
+}

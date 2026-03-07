@@ -1,0 +1,91 @@
+---
+description: Requirements workshop and synthesis workflow for feature-level work
+---
+
+# Requirements Workshop Workflow
+
+## Purpose
+
+Use this workflow to convert a raw feature idea into traceable requirements before implementation.
+
+## When Required
+
+Run this workflow for:
+
+- net-new features
+- behavior-changing enhancements
+- cross-team, API, or data model changes
+- security, privacy, compliance, or legal-impacting changes
+
+You may skip this workflow for:
+
+- documentation-only changes
+- dependency bumps without behavior change
+- cosmetic refactors or chore-only changes
+
+If a hotfix must bypass this workflow, use the exception policy below.
+
+## Output Location
+
+Store the artifact at:
+
+`docs/requirements/<TRACKER-ID>/workshop.md`
+
+Link that path in `docs/tracker.md` evidence for the same tracker ID.
+
+## Required Output Structure
+
+The workshop artifact must use these headings in this order:
+
+1. `# Input Summary`
+2. `# Ambiguities and Risks`
+3. `# Required Workshop Roles`
+4. `# Simulated Workshop Output`
+5. `# Detailed Requirements`
+6. `# Open Questions`
+7. `# Priority and Next Actions`
+8. `# Quality Check`
+
+## Role Rules
+
+- Use only roles needed for this specific case.
+- Include at least one dissenting or adversely affected role.
+- Do not add filler roles with no unique concern.
+- Add specialists when applicable: security, privacy, legal, compliance, operations, support.
+
+## Requirement Traceability Rules
+
+Every requirement in `# Detailed Requirements` must include:
+
+- requirement ID
+- requirement statement
+- source role(s)
+- priority (`Must`, `Should`, `Could`, `Won't`)
+- acceptance criterion or validation condition
+
+Requirements must trace back to concerns raised in `# Simulated Workshop Output`.
+
+## Security and Data Handling
+
+- Use placeholders for secrets, credentials, and sensitive values (for example `YOUR_API_KEY`).
+- Do not include production tokens, customer data, or personal data in workshop artifacts.
+- If real values are required for context, redact them before commit.
+
+## Hotfix Exception Policy
+
+If urgent work must start before workshop completion:
+
+1. Document exception reason in tracker or PR.
+2. Record approvals from:
+   - delivery owner (tech lead or engineering manager)
+   - governance maintainer
+3. Record a due date for retroactive workshop completion.
+4. Complete and link the workshop artifact within 2 business days.
+
+## Completion Criteria
+
+Before moving feature work to implementation:
+
+- workshop artifact exists at the required path
+- open questions are either resolved or explicitly accepted with owner
+- tracker phase/state reflects workshop completion

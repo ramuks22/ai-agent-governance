@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Agent Governance Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "configVersion",
+    "tracker",
+    "gates",
+    "node"
+  ],
+  "properties": {
+    "configVersion": {
+      "type": "string"
+    },
+    "tracker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "idPattern"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "idPattern": {
+          "type": "string"
+        },
+        "allowedPrefixes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preCommit",
+        "prePush"
+      ],
+      "properties": {
+        "preCommit": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "prePush": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "branchProtection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "blockDirectPush": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minVersion"
+      ],
+      "properties": {
+        "minVersion": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
