@@ -72,10 +72,14 @@ Not-required examples:
 
 If urgent production impact requires immediate implementation:
 
-1. Record exception reason in tracker or PR.
-2. Record approvals from delivery owner and governance maintainer.
-3. Record due date for retroactive workshop completion.
-4. Complete workshop artifact within 2 business days.
+Record the exception in the PR body or tracker using this canonical 4-field contract:
+
+- `Reason`: concise production-impact justification for bypassing workshop-first flow.
+- `Approvers`: delivery owner and governance maintainer.
+- `Due Date`: `YYYY-MM-DD` for retroactive workshop completion.
+- `Retroactive Completion Evidence`: link/path to the completed workshop artifact or equivalent closure proof.
+
+Then complete and link the workshop artifact within 2 business days.
 
 ## Before Pushing
 
@@ -153,7 +157,7 @@ Monthly checklist (all items required):
 1. Applicability rule semantics match across scoped docs.
 2. Exempt-category terminology matches canonical wording exactly.
 3. Applicability evidence format and PR-to-tracker linkage semantics match.
-4. Exception policy fields match (reason, approvers, due date, 2-business-day SLA).
+4. Exception policy fields match (reason, approvers, due date, 2-business-day SLA, retroactive completion evidence).
 5. Merge-by-command trigger phrases are consistent.
 6. Merge-by-command step order is consistent.
 7. Bypass policy is consistent (`--no-verify` requires explicit user approval).
