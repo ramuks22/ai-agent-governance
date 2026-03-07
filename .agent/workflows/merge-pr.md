@@ -45,7 +45,19 @@ git commit -a -m "docs: finalize <tracker-ids> merge phase (PR #<number>)"
 git push
 ```
 
-### Step 3: Merge the PR
+### Step 3: Sync Checklist + Checks
+
+- Update PR checklist core items in the PR body so they reflect current tracker evidence state
+- Confirm merge-command evidence is present in the PR body
+- Wait for required checks to pass before merge:
+
+// turbo
+
+```bash
+gh pr checks <number> --watch
+```
+
+### Step 4: Merge the PR
 
 // turbo
 
@@ -53,7 +65,7 @@ git push
 gh pr merge <number> --merge --delete-branch
 ```
 
-### Step 4: Branch Cleanup (if needed)
+### Step 5: Branch Cleanup (if needed)
 
 // turbo
 
@@ -62,7 +74,7 @@ git checkout main
 git branch -D <branch-name>
 ```
 
-### Step 5: Sync Main
+### Step 6: Sync Main
 
 // turbo
 

@@ -7,6 +7,7 @@ This document defines delivery rules, source of truth, and local quality gates.
 - Tracker: `docs/tracker.md`
 - Workflows: `.agent/workflows/*.md`
 - Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`
+- Branch protection contract (canonical): `.agent/workflows/governance.md` -> `Required Branch Protection for main`
 
 ## Tracking Rules
 
@@ -70,9 +71,10 @@ When an explicit merge command is given (e.g., "merge PR #<number> to main",
 1. **Tracker finalization**: Mark associated tracker IDs as `Phase=Merge`, `State=Complete`, and add `PR #<number>` evidence.
    This explicit command authorizes finalization before merge.
 2. **Commit tracker updates** to the PR branch.
-3. **Push** (if push fails and `--no-verify` is needed, approval is required first).
-4. **Merge** the PR.
-5. **Cleanup**: Delete branch (remote + local), pull main.
+3. **Sync PR checklist + evidence**: ensure governance-core checklist items and merge-command evidence are current in PR body.
+4. **Wait for checks**: confirm required checks are green via `gh pr checks <number> --watch`.
+5. **Merge** the PR.
+6. **Cleanup**: Delete branch (remote + local), pull main.
 
 **Auditability**: The merge command must be quoted or linked in the PR body.
 
