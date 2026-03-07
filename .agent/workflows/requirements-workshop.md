@@ -7,6 +7,7 @@ description: Requirements workshop and synthesis workflow for feature-level work
 ## Purpose
 
 Use this workflow to convert a raw feature idea into traceable requirements before implementation.
+Canonical terminology definitions are in `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)`.
 For monthly cross-doc governance drift review policy, see
 `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`.
 

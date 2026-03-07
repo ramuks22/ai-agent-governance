@@ -25,6 +25,7 @@ Before starting any work, verify:
 - Workflow rules: `.agent/workflows/governance.md`
 - Requirements workshop: `.agent/workflows/requirements-workshop.md`
 - Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`
+- Terminology contract (canonical): `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)`
 
 ## Mandatory Workflow
 
@@ -39,7 +40,7 @@ Before starting any work, verify:
 ## Merge-by-Command Protocol
 
 When an explicit merge command is given (see `.agent/workflows/merge-pr.md`), follow
-that checklist exactly. It permits tracker finalization (`Merge` + `Complete`) pre-merge with audit evidence.
+that checklist exactly. It permits tracker finalization (`Phase=Merge, State=Complete`) pre-merge with audit evidence.
 
 ## Exceptions
 

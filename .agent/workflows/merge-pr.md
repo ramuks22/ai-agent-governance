@@ -8,7 +8,7 @@ description: Merge a PR to main with tracker finalization and cleanup
 
 This workflow applies to both AI-assisted and human-initiated merges when you want to:
 
-- Mark tracker items as `Phase=Merge`, `State=Complete` **before** merge (governance exception)
+- Mark tracker items as `Phase=Merge, State=Complete` **before** merge (governance exception)
 - Ensure proper cleanup and audit trail
 
 ## Trigger Methods
@@ -32,7 +32,7 @@ Follow the same checklist below. Document the merge decision in the PR body.
 ### Step 1: Update Tracker (manual edit)
 
 - Edit `docs/tracker.md`
-- Set `Phase=Merge`, `State=Complete`, and add `PR #<number>` in evidence for associated tracker IDs
+- Set `Phase=Merge, State=Complete`, and add `PR #<number>` in evidence for associated tracker IDs
 - Update the tracker header date
 
 ### Step 2: Commit + Push Tracker Updates

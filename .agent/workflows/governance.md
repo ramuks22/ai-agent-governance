@@ -13,7 +13,7 @@ Before each major step, verify:
 | **Feature-level gate** | If applicability is `Required`, is requirements workshop complete and linked (or approved hotfix exception documented)?     |
 | **Before commit**      | Are all changed files consistent with tracker scope?                                                                        |
 | **Before push**        | Did gates pass? Is tracker still accurate?                                                                                  |
-| **Before merge**       | Is tracker ready for finalization (`Merge` + `Complete`)? Are docs updated?                                                 |
+| **Before merge**       | Is tracker ready for finalization (`Phase=Merge, State=Complete`)? Are docs updated?                                         |
 
 > ⚠️ **If any check fails**: STOP and resolve before proceeding.
 
@@ -23,6 +23,69 @@ Before each major step, verify:
 
 - Tracker: `docs/tracker.md`
 - Delivery governance: `docs/development/delivery-governance.md`
+
+## Terminology Contract (Canonical)
+
+This section is the single canonical source for governance terminology.
+
+Approved terms:
+
+- Exempt category term: `documentation-only changes`
+- Tracker finalization term: `Phase=Merge, State=Complete`
+- Applicability evidence line: `Applicability: Required|Not Required — Reason: <one line>`
+
+Disallowed aliases in normative guidance:
+
+- shorthand docs/documentation aliases (for example `docs` + `only`) are disallowed (use `documentation-only changes`)
+- `` `Merge` + `Complete` `` and `` `Merge / Complete` `` (use `Phase=Merge, State=Complete`)
+
+Legacy boundary:
+
+- Historical tracker evidence text is not retro-rewritten; only active guidance and new evidence must use canonical terms.
+
+## Terminology Validation Commands (Deterministic)
+
+Run these commands to validate terminology alignment:
+
+1. Disallow shorthand in normative docs:
+
+```bash
+rg -n "\\bdocs-only\\b" AGENTS.md .agent/workflows/governance.md .agent/workflows/requirements-workshop.md .agent/workflows/merge-pr.md docs/development/delivery-governance.md README.md docs/README.md
+```
+
+Expected: no matches.
+
+2. Require canonical exempt phrase:
+
+```bash
+rg -n "documentation-only changes" .agent/workflows/governance.md .agent/workflows/requirements-workshop.md docs/development/delivery-governance.md
+```
+
+Expected: matches present.
+
+3. Require canonical finalization phrase:
+
+```bash
+rg -n "Phase=Merge, State=Complete" AGENTS.md .agent/workflows/governance.md docs/development/delivery-governance.md docs/tracker.md README.md
+```
+
+Expected: matches present.
+
+4. Require canonical applicability evidence phrase:
+
+```bash
+rg -n "Applicability: Required\\|Not Required — Reason: <one line>" AGENTS.md .agent/workflows/governance.md .agent/workflows/requirements-workshop.md docs/development/delivery-governance.md .github/pull_request_template.md
+```
+
+Expected: matches present.
+
+5. Definition-of-Done structure check:
+
+```bash
+rg -n "^## Definition of Done" .agent/workflows/governance.md docs/development/delivery-governance.md
+```
+
+Expected: canonical + pointer-consistent structure.
 
 ## Mandatory Workflow
 
@@ -130,19 +193,19 @@ Approved exception policy (timeboxed):
 - "push #<number> to main and merge"
 
 **Effect**: The explicit command activates the six-step checklist in
-`.agent/workflows/merge-pr.md` and permits tracker finalization (`Merge` + `Complete`) before merge.
+`.agent/workflows/merge-pr.md` and permits tracker finalization (`Phase=Merge, State=Complete`) before merge.
 
 **Required steps** (in order):
 
-1. Update tracker IDs to `Phase=Merge`, `State=Complete`, and add `PR #<number>` evidence
+1. Update tracker IDs to `Phase=Merge, State=Complete`, and add `PR #<number>` evidence
 2. Commit + push tracker updates to the same PR branch
 3. Sync PR checklist core items and verify merge-command evidence in PR body
 4. Wait for required checks to pass (`governance` + `pr-checklist`)
 5. Merge PR to main
 6. Delete branch (remote + local), then pull + sync main locally
 
-**Evidence requirement**: PR body must contain a quoted command or a link to the
-command message.
+**Evidence requirement**: PR body must contain one of the evidence forms listed in
+`.agent/workflows/merge-pr.md` -> `Evidence Requirement`.
 
 ## Definition of Done
 
@@ -154,7 +217,7 @@ command message.
 - [ ] Docs updated if behavior changed
 - [ ] For feature-level work, workshop artifact is linked and requirements are traceable
 - [ ] Tracker updated with PR reference
-- [ ] Tracker phase/state set to `Merge / Complete` only after PR is merged to `main`
+- [ ] Tracker phase/state set to `Phase=Merge, State=Complete` only after PR is merged to `main`
       (or explicit approved exception)
 
 ## Governance Consistency Review (Monthly)
@@ -189,6 +252,7 @@ Monthly checklist (all items required):
 7. Bypass policy is consistent (`--no-verify` requires explicit user approval).
 8. Definition-of-Done criteria are consistent (workshop traceability + phase/state finalization conditions).
 9. Branch protection profile for `main` matches this document (run protection API check and compare required fields).
+10. Terminology contract conformance is validated using the deterministic commands in this file.
 
 Output and evidence format:
 
