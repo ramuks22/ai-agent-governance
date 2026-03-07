@@ -7,16 +7,22 @@ import assert from 'node:assert';
  */
 
 describe('Secret Detection Patterns', () => {
-    const placeholderRe = /\b(test|example|changeme|placeholder|dummy|your[_-]?|redacted|YOUR_API_KEY|YOUR_KEY)\b/i;
+    const placeholderRe = /\b(test|example|changeme|placeholder|dummy|redacted|xxxx|todo|your)(?:[_-][A-Za-z0-9]+)*\b/i;
 
     // Build patterns dynamically to avoid triggering secret scan on the test file itself
     const PKW = ['PRIV', 'ATE ', 'KEY'].join('');
     const privateKeyMarker = `-----BEGIN (RSA |EC |OPENSSH )?${PKW}-----`;
     const secretAssignmentPattern = '\\b(API_KEY|SECRET|TOKEN|PASSWORD)\\b\\s*[:=]\\s*[\'"][^\'"]{12,}[\'"]';
 
+    // Updated patterns to match gates.mjs
     const patterns = [
         { name: 'Private key block', re: new RegExp(privateKeyMarker) },
         { name: 'High-risk secret assignment', re: new RegExp(secretAssignmentPattern, 'i') },
+        { name: 'Unquoted secret assignment', re: /\b(API_KEY|SECRET|TOKEN|PASSWORD|PRIVATE_KEY|ACCESS_KEY)\b\s*[:=]\s*[^\s'"#]{12,}/i },
+        { name: 'AWS access key', re: /\bAKIA[0-9A-Z]{16}\b/ },
+        { name: 'GCP service account key', re: /"private_key_id"\s*:\s*"[a-f0-9]{40}"/ },
+        { name: 'GitHub token', re: /\b(ghp_[a-zA-Z0-9]{36}|gho_[a-zA-Z0-9]{36}|ghu_[a-zA-Z0-9]{36}|ghs_[a-zA-Z0-9]{36}|ghr_[a-zA-Z0-9]{36})\b/ },
+        { name: 'Slack token', re: /\bxox[baprs]-[0-9]{10,13}-[0-9]{10,13}[a-zA-Z0-9-]*\b/ },
     ];
 
     function buildPrivateKeyLine(type) {
@@ -37,10 +43,47 @@ describe('Secret Detection Patterns', () => {
         return { label, value };
     }
 
+    function buildUnquotedSecretAssignment() {
+        const value = ['sk', 'live', 'abc123xyz789def'].join('_');
+        return `TOKEN = ${value}`;
+    }
+
+    function buildAwsKeyLine() {
+        const key = ['AKIA', 'IOSFODNN7CX12345'].join('');
+        return `${key} # example`;
+    }
+
+    function buildGcpPrivateKeyIdLine() {
+        const field = ['private', 'key', 'id'].join('_');
+        const value = ['1234567890abcdef', '1234567890abcdef', '12345678'].join('');
+        return `"${field}": "${value}"`;
+    }
+
+    function buildGitHubTokenLine() {
+        return ['ghp_', '123456789012', '345678901234', '567890123456'].join('');
+    }
+
+    function buildSlackTokenLine() {
+        return ['xoxb', '123456789012', '1234567890123', 'abcdef123456'].join('-');
+    }
+
     function detectSecrets(line) {
         const hits = [];
         for (const p of patterns) {
-            if (p.re.test(line) && !placeholderRe.test(line)) {
+            if (p.re.test(line)) {
+                if (p.name.includes('assignment')) {
+                    // Simplified extraction for test simulation
+                    // Note: This logic must mirror gates.mjs extractValue
+                    let val = '';
+                    const quoted = line.match(/[:=]\s*['"]([^'"]+)['"]/);
+                    if (quoted) val = quoted[1];
+                    else {
+                        const unquoted = line.match(/[:=]\s*([^\s'"#\n]+)/);
+                        if (unquoted) val = unquoted[1];
+                    }
+                    if (placeholderRe.test(val)) continue;
+                }
+                // For other patterns: NO global placeholder bypass allowed
                 hits.push(p.name);
             }
         }
@@ -61,22 +104,34 @@ describe('Secret Detection Patterns', () => {
         assert.deepStrictEqual(hits, ['High-risk secret assignment']);
     });
 
+    it('should detect unquoted secret assignments', () => {
+        const line = buildUnquotedSecretAssignment();
+        const hits = detectSecrets(line);
+        assert.deepStrictEqual(hits, ['Unquoted secret assignment']);
+    });
+
     it('should NOT detect placeholder secrets', () => {
-        // "placeholder" as a separate word triggers the exception
-        const line = 'API_KEY = "this is a placeholder value"';
+        // Explicit placeholder markers should skip detection
+        const line = 'API_KEY = "EXAMPLE_KEY_1234567890"';
         const hits = detectSecrets(line);
         assert.deepStrictEqual(hits, []);
     });
 
     it('should NOT detect example secrets', () => {
-        // "example" keyword triggers the exception
-        const line = 'SECRET = "example value for docs"';
+        // Explicit placeholder markers should skip detection
+        const line = 'SECRET = "YOUR_SECRET_EXAMPLE_123456789012"';
         const hits = detectSecrets(line);
         assert.deepStrictEqual(hits, []);
     });
 
     it('should NOT detect short secrets (less than 12 chars)', () => {
         const line = 'TOKEN = "short"';
+        const hits = detectSecrets(line);
+        assert.deepStrictEqual(hits, []);
+    });
+
+    it('should NOT detect placeholder in unquoted assignment value', () => {
+        const line = 'TOKEN = YOUR_TOKEN_EXAMPLE_1234567890';
         const hits = detectSecrets(line);
         assert.deepStrictEqual(hits, []);
     });
@@ -91,6 +146,30 @@ describe('Secret Detection Patterns', () => {
         const line = buildPrivateKeyLine('EC');
         const hits = detectSecrets(line);
         assert.deepStrictEqual(hits, ['Private key block']);
+    });
+
+    it('should detect AWS keys even with comment placeholders', () => {
+        const line = buildAwsKeyLine();
+        const hits = detectSecrets(line);
+        assert.deepStrictEqual(hits, ['AWS access key']);
+    });
+
+    it('should detect GCP keys', () => {
+        const line = buildGcpPrivateKeyIdLine();
+        const hits = detectSecrets(line);
+        assert.deepStrictEqual(hits, ['GCP service account key']);
+    });
+
+    it('should detect GitHub tokens', () => {
+        const line = buildGitHubTokenLine();
+        const hits = detectSecrets(line);
+        assert.deepStrictEqual(hits, ['GitHub token']);
+    });
+
+    it('should detect Slack tokens', () => {
+        const line = buildSlackTokenLine();
+        const hits = detectSecrets(line);
+        assert.deepStrictEqual(hits, ['Slack token']);
     });
 });
 
