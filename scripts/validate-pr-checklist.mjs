@@ -71,6 +71,41 @@ function parseHotfix(body) {
   };
 }
 
+function parseMergeByCommandChecklist(body) {
+  const checklistMatch = body.match(/^- \[(x|X| )\]\s*\*\*Merge-by-command\*\*.*$/im);
+  if (!checklistMatch) {
+    return { found: false, checked: false };
+  }
+  return {
+    found: true,
+    checked: checklistMatch[1].toLowerCase() === 'x',
+  };
+}
+
+function hasMergeCommandEvidence(body) {
+  if (/(^|\n)\s*>\s*(merge PR #\d+ to main|merge #\d+ to main|push #\d+ to main and merge)\b/im.test(body)) {
+    return true;
+  }
+
+  if (/(^|\n)\s*(merge PR #\d+ to main|merge #\d+ to main|push #\d+ to main and merge)\b/im.test(body)) {
+    return true;
+  }
+
+  if (/Manual merge per governance protocol/i.test(body)) {
+    return true;
+  }
+
+  if (/\[[^\]]*merge[^\]]*\]\(https?:\/\/[^)]+\)/i.test(body)) {
+    return true;
+  }
+
+  if (/(merge command|command message|merge evidence).*(https?:\/\/\S+)/i.test(body)) {
+    return true;
+  }
+
+  return false;
+}
+
 function validateTrackerEvidence(trackerIds, trackerText, prNumber) {
   const issues = [];
   for (const id of trackerIds) {
@@ -113,6 +148,11 @@ export function validatePrChecklist({ body, trackerText, prNumber }) {
         issues.push('Applicability is Required: include a workshop artifact path (`docs/requirements/.../workshop.md`) or a complete hotfix exception block.');
       }
     }
+  }
+
+  const mergeByCommand = parseMergeByCommandChecklist(body || '');
+  if (mergeByCommand.checked && !hasMergeCommandEvidence(body || '')) {
+    issues.push('Merge-by-command checklist item cannot be checked until merge command evidence is present (quoted command, merge command link, or "Manual merge per governance protocol").');
   }
 
   if (trackerIds.length > 0) {

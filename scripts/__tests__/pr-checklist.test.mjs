@@ -76,3 +76,34 @@ test('passes with required applicability and complete hotfix contract', () => {
   const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
   assert.deepStrictEqual(result.issues, []);
 });
+
+test('fails when merge-by-command is checked before merge evidence exists', () => {
+  const body = [
+    '## Tracker',
+    '- IDs: AG-GOV-020',
+    'Applicability: Not Required — Reason: docs-only change',
+    '## Non-negotiable checklist',
+    '- [x] **Merge-by-command** (required for AI-assisted merges): Quoted command or link included',
+  ].join('\n');
+
+  const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
+  assert.ok(
+    result.issues.some((issue) =>
+      issue.includes('Merge-by-command checklist item cannot be checked until merge command evidence is present')
+    )
+  );
+});
+
+test('passes when merge-by-command is checked and merge command evidence is present', () => {
+  const body = [
+    '## Tracker',
+    '- IDs: AG-GOV-020',
+    'Applicability: Not Required — Reason: docs-only change',
+    '## Non-negotiable checklist',
+    '- [x] **Merge-by-command** (required for AI-assisted merges): Quoted command or link included',
+    '> merge PR #21 to main',
+  ].join('\n');
+
+  const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
+  assert.deepStrictEqual(result.issues, []);
+});

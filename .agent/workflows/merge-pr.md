@@ -49,6 +49,7 @@ git push
 
 - Update PR checklist core items in the PR body so they reflect current tracker evidence state
 - Confirm merge-command evidence is present in the PR body
+- Keep `Merge-by-command` unchecked until that evidence is present
 - Wait for required checks to pass before merge:
 
 // turbo
