@@ -1,14 +1,20 @@
 ## Summary
-- 
+
+-
 
 ## Tracker
-- IDs: 
-- Phase/State: 
+
+- IDs:
+- Phase/State:
+- Applicability: `Required|Not Required`
+- Reason:
 
 ## Non-negotiable checklist
 
 - [ ] Tracker ID included and tracker phase/state updated
-- [ ] For feature-level work, requirements workshop artifact is linked (or approved hotfix exception is documented with due date)
+- [ ] Applicability decision line included in PR body: `Applicability: Required|Not Required — Reason: <one line>`
+- [ ] Tracker evidence references this PR for applicability auditability
+- [ ] If `Applicability: Required`, requirements workshop artifact is linked (or approved hotfix exception is documented with due date)
 - [ ] No secrets committed (API keys/tokens/passwords)
 - [ ] No new XSS injection surfaces (sanitization preserved)
 - [ ] Lint + format checks pass

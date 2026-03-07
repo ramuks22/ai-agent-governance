@@ -24,8 +24,17 @@ Artifact path:
 
 Applicability:
 
-- Required: net-new features, behavior-changing enhancements, cross-team/API/data changes, and security/privacy/compliance/legal-impacting work.
-- Not required: docs-only changes, dependency bumps without behavior change, cosmetic refactors, chore-only updates.
+- Primary rule (<=60 seconds): run the four yes/no checks in `.agent/workflows/requirements-workshop.md`.
+- If any answer is `Yes`, workshop is required.
+- If all answers are `No` and change is exempt, workshop is not required.
+- If uncertain, workshop is required.
+- Exempt categories (exact terms): documentation-only changes; dependency bumps without behavior change; cosmetic refactors or chore-only changes.
+- Supporting required examples: net-new features, behavior-changing enhancements, cross-team/API/data changes, and security/privacy/compliance/legal-impacting work.
+
+Applicability evidence (required):
+
+- PR body line: `Applicability: Required|Not Required — Reason: <one line>`
+- Tracker evidence must reference the PR containing this line.
 
 Hotfix exception:
 
@@ -75,6 +84,7 @@ An item may move to finalization (`Phase=Merge`, `State=Complete`) only if:
 - build succeeds and budgets pass (if applicable)
 - no new security exposure is introduced
 - docs updated if behavior changed
+- applicability decision is recorded in PR body and tracker evidence references that PR
 - for feature-level work, requirements workshop is completed and linked in tracker evidence
 - workshop requirements are traceable to stakeholder concerns
 - PR merged to `main` (or explicitly approved exception)

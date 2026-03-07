@@ -11,7 +11,8 @@ Before starting any work, verify:
 - [ ] **Docs in sync?** Are referenced docs (`delivery-governance.md`, workflows) current?
 - [ ] **Branch correct?** Am I on a feature branch, not `main`?
 - [ ] **New Feature/Issue?** Investigate → Create Tracker Item → Fix (Strict Sequence)
-- [ ] **Feature-level change?** Requirements workshop completed and linked in tracker evidence (or approved hotfix exception recorded)
+- [ ] **Applicability decided?** Use the quick applicability decision in `.agent/workflows/requirements-workshop.md` and prepare PR evidence line.
+- [ ] **Applicability is Required?** Requirements workshop completed and linked in tracker evidence (or approved hotfix exception recorded)
 
 > ⚠️ **If any check fails**: STOP and resolve before proceeding.
 
@@ -28,9 +29,11 @@ Before starting any work, verify:
 
 1. Every change must map to a tracker ID (or an explicit documented exception).
 2. Update tracker phase/state when work starts and finishes.
-3. For feature-level work, complete requirements workshop before coding (or document approved hotfix exception).
-4. Use local quality gates (pre-commit + pre-push).
-5. No direct pushes to `main`. Use PRs and the checklist.
+3. Before coding, complete the quick applicability decision and record it in the PR body as:
+   `Applicability: Required|Not Required — Reason: <one line>`.
+4. If applicability is `Required`, complete requirements workshop before coding (or document approved hotfix exception).
+5. Use local quality gates (pre-commit + pre-push).
+6. No direct pushes to `main`. Use PRs and the checklist.
 
 ## Merge-by-Command Protocol
 
