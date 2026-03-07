@@ -189,7 +189,7 @@ function secretScan() {
   if (!addedLines.length && !changedFiles.length) return;
 
   // Placeholder patterns - checked against just the VALUE portion, not the whole line
-  const placeholderRe = /\b(test|example|changeme|placeholder|dummy|your[_-]?|redacted|YOUR_API_KEY|YOUR_KEY|xxxx|TODO)\b/i;
+  const placeholderRe = /\b(test|example|changeme|placeholder|dummy|redacted|xxxx|todo|your)(?:[_-][A-Za-z0-9]+)*\b/i;
 
   // Build patterns dynamically to avoid self-detection when committing this file
   const PKW = ['PRIV', 'ATE ', 'KEY'].join('');
@@ -236,13 +236,14 @@ function secretScan() {
 
     for (const p of patterns) {
       if (p.re.test(line)) {
-        // For assignment patterns, check placeholder only in the value
+        // For assignment patterns, check placeholder only in the extracted value
         if (p.name.includes('assignment')) {
           const value = extractValue(line);
           if (placeholderRe.test(value)) continue; // Placeholder in value, skip
         } else {
-          // For other patterns, check if line contains placeholder anywhere
-          if (placeholderRe.test(line)) continue;
+          // For other patterns (specific keys/tokens), we no longer support generic placeholders
+          // because it allows "AKIA... # example" to bypass. 
+          // Use [NO-TRACK] or invalid key formats for documentation.
         }
         hits.add(p.name);
       }

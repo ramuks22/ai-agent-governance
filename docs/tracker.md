@@ -19,6 +19,7 @@
 | AG-GOV-002  | Critical | Governance | **v1.1 Critical Fixes**: CI parity, branch protection bypass, template drift, noop hard-fail, tests. | PR merged | See implementation plan. | Merge | Complete |
 | AG-GOV-003  | High     | Governance | **Installable distribution and upgrade path**: adoption requires manual copy and has no upgrade story. | Manual copy instructions | Implement revised multi-phase installable distribution plan (see Future Scope). | Discovery | In Progress |
 | AG-GOV-004  | High     | Governance | **Requirements workshop governance artifact**: workshop process, template, and Phase+State tracker model are missing. | Initial push to `main` (bootstrap) | Add workflow/template/docs updates only (no tooling expansion), aligned to governance source-of-truth docs. | Merge | Complete |
+| AG-GOV-005  | High     | Governance | **Security gate review follow-up**: close final review gaps before push (workflow compliance + test coverage + cleanup). | Feature branch created (`codex/AG-GOV-005-secret-scan-finalize`), tests `43/43`, `governance:check`, `gate:precommit`, and `gate:prepush` all pass (2026-03-07). | Use feature branch + tracker mapping, add unquoted assignment test coverage, remove minor code drift, and re-run all gates. | Validation | Complete |
 
 ## Future Scope: Installable Distribution Plan (v1.1)
 
