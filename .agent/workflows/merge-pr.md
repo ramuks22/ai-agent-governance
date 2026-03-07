@@ -7,18 +7,22 @@ description: Merge a PR to main with tracker finalization and cleanup
 ## When to Use
 
 This workflow applies to both AI-assisted and human-initiated merges when you want to:
+
 - Mark tracker items as `Phase=Merge`, `State=Complete` **before** merge (governance exception)
 - Ensure proper cleanup and audit trail
 
 ## Trigger Methods
 
 ### AI-Assisted Merge
+
 Use explicit command phrases:
+
 - "merge PR #<number> to main"
 - "merge #<number> to main"
 - "push #<number> to main and merge"
 
 ### Human-Initiated Merge
+
 Follow the same checklist below. Document the merge decision in the PR body.
 
 ---
@@ -34,6 +38,7 @@ Follow the same checklist below. Document the merge decision in the PR body.
 ### Step 2: Commit + Push Tracker Updates
 
 // turbo
+
 ```bash
 npx prettier --write docs/tracker.md
 git commit -a -m "docs: finalize <tracker-ids> merge phase (PR #<number>)"
@@ -43,6 +48,7 @@ git push
 ### Step 3: Merge the PR
 
 // turbo
+
 ```bash
 gh pr merge <number> --merge --delete-branch
 ```
@@ -50,6 +56,7 @@ gh pr merge <number> --merge --delete-branch
 ### Step 4: Branch Cleanup (if needed)
 
 // turbo
+
 ```bash
 git checkout main
 git branch -D <branch-name>
@@ -58,6 +65,7 @@ git branch -D <branch-name>
 ### Step 5: Sync Main
 
 // turbo
+
 ```bash
 git pull origin main
 ```
@@ -75,3 +83,6 @@ The PR body must contain one of:
 ## Governance Tie-In
 
 If Step 2 push fails and `--no-verify` is needed, STOP and request explicit user approval first.
+
+For monthly cross-doc governance drift review policy, see
+`.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`.

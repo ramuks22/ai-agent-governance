@@ -24,6 +24,7 @@ Before starting any work, verify:
 - Delivery governance: `docs/development/delivery-governance.md`
 - Workflow rules: `.agent/workflows/governance.md`
 - Requirements workshop: `.agent/workflows/requirements-workshop.md`
+- Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`
 
 ## Mandatory Workflow
 
