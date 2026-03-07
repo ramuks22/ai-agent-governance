@@ -286,12 +286,12 @@ function secretScan() {
 /**
  * Parse push refspecs from stdin (pre-push hook format).
  * Each line: <local ref> <local sha> <remote ref> <remote sha>
- * Returns array of target branch names.
+ * Returns array of { localBranch, remoteBranch }.
  * 
  * Note: Only reads stdin when invoked as a git hook (stdin is provided).
  * When run manually (npm run gate:prepush), stdin is a TTY and we skip.
  */
-function getPushTargets() {
+function getPushRefspecs() {
   // In CI, branch protection is handled by the platform
   if (isCI) return [];
 
@@ -303,28 +303,55 @@ function getPushTargets() {
   try {
     // Read from stdin (pre-push hook provides refspecs)
     const input = readFileSync(0, 'utf8');
-    const targets = [];
+    const refs = [];
     for (const line of input.split('\n')) {
       const parts = line.trim().split(/\s+/);
-      if (parts.length >= 3) {
-        // parts[2] is the remote ref, e.g., refs/heads/main
-        const remoteRef = parts[2];
-        const match = remoteRef.match(/^refs\/heads\/(.+)$/);
-        if (match) {
-          targets.push(match[1]);
-        }
-      }
+      if (parts.length < 3) continue;
+
+      const localRef = parts[0];
+      const remoteRef = parts[2];
+      const localMatch = localRef.match(/^refs\/heads\/(.+)$/);
+      const remoteMatch = remoteRef.match(/^refs\/heads\/(.+)$/);
+      refs.push({
+        localBranch: localMatch ? localMatch[1] : null,
+        remoteBranch: remoteMatch ? remoteMatch[1] : null,
+      });
     }
-    return targets;
+    return refs;
   } catch {
     // stdin not available or empty
     return [];
   }
 }
 
-function checkBranchProtection(protectedBranches) {
+function validateBranchName(branchName, branchNamePattern, contextLabel) {
+  if (!branchNamePattern || !branchName) return;
+
+  let re;
+  try {
+    re = new RegExp(branchNamePattern);
+  } catch {
+    fail(`✖ Invalid branchNamePattern regex in governance config: ${branchNamePattern}`);
+  }
+
+  if (!re.test(branchName)) {
+    fail(
+      [
+        `✖ Governance violation: ${contextLabel} '${branchName}' does not match required naming policy.`,
+        `Allowed pattern: ${branchNamePattern}`,
+        "Use one of: feat/, fix/, hotfix/, chore/, docs/, refactor/, test/, perf/, build/, ci/, revert/, release/.",
+        'Example: feat/add-branch-policy',
+        'Rename with: git branch -m <new-name>',
+      ].join('\n')
+    );
+  }
+}
+
+function checkBranchProtection(protectedBranches, branchNamePattern) {
   // Method 1: Check current branch (for direct pushes)
   const currentBranch = execText('git', ['branch', '--show-current']).trim();
+  validateBranchName(currentBranch, branchNamePattern, 'Current branch');
+
   if (protectedBranches.includes(currentBranch)) {
     fail(
       [
@@ -335,12 +362,16 @@ function checkBranchProtection(protectedBranches) {
   }
 
   // Method 2: Check push targets from refspecs (for refspec-based pushes)
-  const pushTargets = getPushTargets();
-  for (const target of pushTargets) {
-    if (protectedBranches.includes(target)) {
+  const pushRefs = getPushRefspecs();
+  for (const ref of pushRefs) {
+    if (ref.localBranch) {
+      validateBranchName(ref.localBranch, branchNamePattern, 'Pushed local branch');
+    }
+
+    if (ref.remoteBranch && protectedBranches.includes(ref.remoteBranch)) {
       fail(
         [
-          `✖ Governance violation: Push targeting ${target} is blocked.`,
+          `✖ Governance violation: Push targeting ${ref.remoteBranch} is blocked.`,
           'Use a feature branch and open a PR.',
         ].join('\n')
       );
@@ -380,7 +411,10 @@ if (gate === 'pre-commit') {
 if (gate === 'pre-push') {
   // Skip branch protection in CI (CI has its own branch rules)
   if (!isCI) {
-    checkBranchProtection(branchProtection.blockDirectPush || []);
+    checkBranchProtection(
+      branchProtection.blockDirectPush || [],
+      branchProtection.branchNamePattern || ''
+    );
   }
 
   for (const command of config.gates.prePush || []) {

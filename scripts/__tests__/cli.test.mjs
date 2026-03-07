@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, writeFileSync, appendFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +38,8 @@ test('CLI help displays commands', () => {
   assert.match(result.stdout, /ai-governance <command>/);
   assert.match(result.stdout, /init/);
   assert.match(result.stdout, /doctor/);
+  assert.match(result.stdout, /upgrade/);
+  assert.match(result.stdout, /rollback/);
 });
 
 test('check fails when governance config is missing', () => {
@@ -81,7 +83,9 @@ test('init refuses overwrite when managed files drift without --force', () => {
   const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
   assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
 
-  appendFileSync(path.join(repo, 'AGENTS.md'), '\nmanual local edit\n', 'utf8');
+  const agentsPath = path.join(repo, 'AGENTS.md');
+  const current = readFileSync(agentsPath, 'utf8');
+  writeFileSync(agentsPath, current.replace('AI Agent Governance Rules', 'AI Agent Governance Rules (edited local)'), 'utf8');
 
   const conflict = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
   assert.notEqual(conflict.status, 0);
@@ -108,4 +112,66 @@ test('auto hook strategy does not overwrite existing hook manager configuration'
 
   const check = run(['check'], repo);
   assert.equal(check.status, 0, `${check.stdout}\n${check.stderr}`);
+});
+
+test('upgrade fails when manifest is missing', () => {
+  const repo = setupRepo('gov-cli-upgrade-missing');
+  const result = run(['upgrade'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Missing \.governance\/manifest\.json/);
+});
+
+test('upgrade dry-run can emit deterministic patch output', () => {
+  const repo = setupRepo('gov-cli-upgrade-patch');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const patchPath = '.governance/patches/custom.patch';
+  const upgrade = run(['upgrade', '--dry-run', `--patch=${patchPath}`], repo);
+  assert.equal(upgrade.status, 0, `${upgrade.stdout}\n${upgrade.stderr}`);
+  assert.equal(existsSync(path.join(repo, patchPath)), true);
+  assert.match(upgrade.stdout, /Wrote patch file/);
+});
+
+test('upgrade conflicts fail closed and rollback restores snapshot when forced', () => {
+  const repo = setupRepo('gov-cli-upgrade-rollback');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const agentsPath = path.join(repo, 'AGENTS.md');
+  const editedToken = 'AI Agent Governance Rules (edited local)';
+  const originalContent = readFileSync(agentsPath, 'utf8');
+  writeFileSync(agentsPath, originalContent.replace('AI Agent Governance Rules', editedToken), 'utf8');
+
+  const blocked = run(['upgrade'], repo);
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stdout, /Conflicts detected/);
+
+  const forcedUpgrade = run(['upgrade', '--force'], repo);
+  assert.equal(forcedUpgrade.status, 0, `${forcedUpgrade.stdout}\n${forcedUpgrade.stderr}`);
+  assert.equal(existsSync(path.join(repo, '.governance', 'backups', 'index.json')), true);
+  assert.doesNotMatch(readFileSync(agentsPath, 'utf8'), new RegExp(editedToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+
+  const rollbackBlocked = run(['rollback'], repo);
+  assert.notEqual(rollbackBlocked.status, 0);
+  assert.match(rollbackBlocked.stderr, /clean git working tree/);
+
+  const rollbackForced = run(['rollback', '--force'], repo);
+  assert.equal(rollbackForced.status, 0, `${rollbackForced.stdout}\n${rollbackForced.stderr}`);
+  assert.match(readFileSync(agentsPath, 'utf8'), new RegExp(editedToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('doctor fails when managed block markers are corrupted', () => {
+  const repo = setupRepo('gov-cli-doctor-managed-blocks');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const agentsPath = path.join(repo, 'AGENTS.md');
+  const current = readFileSync(agentsPath, 'utf8');
+  writeFileSync(agentsPath, current.replace('<!-- ai-governance:AGENTS.md:begin -->\n', ''), 'utf8');
+
+  const doctor = run(['doctor'], repo);
+  assert.notEqual(doctor.status, 0);
+  assert.match(doctor.stdout, /\[doctor\] FAIL managed-blocks/);
+  assert.match(doctor.stdout, /AGENTS\.md/);
 });

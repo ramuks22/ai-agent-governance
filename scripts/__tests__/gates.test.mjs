@@ -1,5 +1,6 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
 
 /**
  * Tests for gates.mjs logic
@@ -227,12 +228,70 @@ describe('Branch Protection Logic', () => {
     });
 });
 
+describe('Branch Naming Policy', () => {
+    const config = JSON.parse(readFileSync('governance.config.json', 'utf8'));
+    const branchNamePattern = new RegExp(config.branchProtection.branchNamePattern);
+
+    function isValidBranchName(branch) {
+        if (!branch) return true;
+        return branchNamePattern.test(branch);
+    }
+
+    it('allows feat prefix', () => {
+        assert.strictEqual(isValidBranchName('feat/branch-policy-enforcement'), true);
+    });
+
+    it('allows fix prefix', () => {
+        assert.strictEqual(isValidBranchName('fix/secret-scan-regression'), true);
+    });
+
+    it('allows hotfix prefix', () => {
+        assert.strictEqual(isValidBranchName('hotfix/prod-outage-001'), true);
+    });
+
+    it('allows docs prefix', () => {
+        assert.strictEqual(isValidBranchName('docs/update-readme'), true);
+    });
+
+    it('allows chore prefix', () => {
+        assert.strictEqual(isValidBranchName('chore/cleanup-legacy-config'), true);
+    });
+
+    it('allows refactor prefix', () => {
+        assert.strictEqual(isValidBranchName('refactor/split-governance-check'), true);
+    });
+
+    it('rejects codex prefix', () => {
+        assert.strictEqual(isValidBranchName('codex/ag-gov-017-branch-policy'), false);
+    });
+
+    it('rejects unsupported prefix', () => {
+        assert.strictEqual(isValidBranchName('spike/new-experiment'), false);
+    });
+
+    it('rejects missing slash pattern', () => {
+        assert.strictEqual(isValidBranchName('feat'), false);
+    });
+});
+
 describe('Push Refspec Parsing', () => {
     function parseRefspec(line) {
         const parts = line.trim().split(/\s+/);
         if (parts.length >= 3) {
             const remoteRef = parts[2];
             const match = remoteRef.match(/^refs\/heads\/(.+)$/);
+            if (match) {
+                return match[1];
+            }
+        }
+        return null;
+    }
+
+    function parseLocalRefspec(line) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 1) {
+            const localRef = parts[0];
+            const match = localRef.match(/^refs\/heads\/(.+)$/);
             if (match) {
                 return match[1];
             }
@@ -258,5 +317,10 @@ describe('Push Refspec Parsing', () => {
     it('should handle nested branch names', () => {
         const line = 'refs/heads/local abc123 refs/heads/feature/deploy def456';
         assert.strictEqual(parseRefspec(line), 'feature/deploy');
+    });
+
+    it('should parse local branch from refspec', () => {
+        const line = 'refs/heads/feat/update-governance abc123 refs/heads/main def456';
+        assert.strictEqual(parseLocalRefspec(line), 'feat/update-governance');
     });
 });
