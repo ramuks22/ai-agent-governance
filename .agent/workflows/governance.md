@@ -96,6 +96,24 @@ checks with `--no-verify`:
 - This overrides any automation or environment policy.
 - Document the approval in the PR description or tracker notes.
 
+## Required Branch Protection for `main`
+
+`main` must remain protected with this minimum profile:
+
+- Required status checks (`strict=true`): `governance`, `pr-checklist`
+- Required pull request reviews: at least 1 approval
+- Dismiss stale approvals: enabled
+- Require conversation resolution: enabled
+- Enforce protections for administrators: enabled
+- Force pushes: disabled
+- Branch deletion: disabled
+
+Verification command:
+
+```bash
+gh api repos/:owner/:repo/branches/main/protection
+```
+
 ## Merge-By-Command Protocol
 
 **Trigger phrases** (explicit command required):
@@ -104,16 +122,17 @@ checks with `--no-verify`:
 - "merge #<number> to main"
 - "push #<number> to main and merge"
 
-**Effect**: The explicit command activates the five-step checklist in
+**Effect**: The explicit command activates the six-step checklist in
 `.agent/workflows/merge-pr.md` and permits tracker finalization (`Merge` + `Complete`) before merge.
 
 **Required steps** (in order):
 
 1. Update tracker IDs to `Phase=Merge`, `State=Complete`, and add `PR #<number>` evidence
 2. Commit + push tracker updates to the same PR branch
-3. Merge PR to main
-4. Delete branch (remote + local)
-5. Pull + sync main locally
+3. Sync PR checklist core items and verify merge-command evidence in PR body
+4. Wait for required checks to pass (`governance` + `pr-checklist`)
+5. Merge PR to main
+6. Delete branch (remote + local), then pull + sync main locally
 
 **Evidence requirement**: PR body must contain a quoted command or a link to the
 command message.
@@ -162,11 +181,14 @@ Monthly checklist (all items required):
 6. Merge-by-command step order is consistent.
 7. Bypass policy is consistent (`--no-verify` requires explicit user approval).
 8. Definition-of-Done criteria are consistent (workshop traceability + phase/state finalization conditions).
+9. Branch protection profile for `main` matches this document (run protection API check and compare required fields).
 
 Output and evidence format:
 
 - Record result in tracker evidence as:
   - `YYYY-MM-DD | Reviewer=<name> | Result=PASS|DRIFT_FOUND | DriftItems=<none|IDs>`
+- Include branch protection verification evidence in the same note:
+  - `ProtectionCheck=<PASS|DRIFT> | Command=gh api repos/:owner/:repo/branches/main/protection`
 
 Drift handling:
 
