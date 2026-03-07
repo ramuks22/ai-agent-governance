@@ -2,7 +2,7 @@
 
 This folder contains the governance framework documentation.
 
-## Installable Distribution (AG-GOV-003 Stage 5)
+## Installable Distribution (AG-GOV-003 Stage 6)
 
 Package-first commands:
 
@@ -12,6 +12,8 @@ Package-first commands:
 - `npx @ramuks22/ai-agent-governance ci-check --gate all`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
+- `npx @ramuks22/ai-agent-governance adopt`
+- `npx @ramuks22/ai-agent-governance adopt --apply --force`
 - `npx @ramuks22/ai-agent-governance rollback`
 
 Legacy/manual mode remains supported as fallback.
@@ -44,3 +46,4 @@ Legacy/manual mode remains supported as fallback.
 - `docs/requirements/AG-GOV-003-stage3/workshop.md` - shared workshop artifact for Stage 3 upgrade/rollback/corruption handling
 - `docs/requirements/AG-GOV-003-stage4/workshop.md` - shared workshop artifact for Stage 4 presets/wizard delivery
 - `docs/requirements/AG-GOV-003-stage5/workshop.md` - shared workshop artifact for Stage 5 CI integration
+- `docs/requirements/AG-GOV-003-stage6/workshop.md` - shared workshop artifact for Stage 6 adopt migration flow

@@ -32,6 +32,17 @@ function setupRepo(name) {
   return dir;
 }
 
+function commitAll(cwd, message = 'chore: commit') {
+  const email = runText('git', ['config', 'user.email', 'ci@example.com'], cwd);
+  assert.equal(email.status, 0, email.stderr);
+  const name = runText('git', ['config', 'user.name', 'CI'], cwd);
+  assert.equal(name.status, 0, name.stderr);
+  const add = runText('git', ['add', '-A'], cwd);
+  assert.equal(add.status, 0, add.stderr);
+  const commit = runText('git', ['commit', '-m', message], cwd);
+  assert.equal(commit.status, 0, commit.stderr);
+}
+
 test('CLI help displays commands', () => {
   const result = run(['--help'], process.cwd());
   assert.equal(result.status, 0);
@@ -40,6 +51,7 @@ test('CLI help displays commands', () => {
   assert.match(result.stdout, /ci-check/);
   assert.match(result.stdout, /doctor/);
   assert.match(result.stdout, /upgrade/);
+  assert.match(result.stdout, /adopt/);
   assert.match(result.stdout, /rollback/);
   assert.match(result.stdout, /--wizard/);
 });
@@ -255,6 +267,100 @@ test('upgrade fails when manifest is missing', () => {
   const result = run(['upgrade'], repo);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Missing \.governance\/manifest\.json/);
+});
+
+test('adopt report-only writes report and patch without managed-file mutations', () => {
+  const repo = setupRepo('gov-cli-adopt-report-only');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(existsSync(path.join(repo, '.governance', 'adopt-report.md')), true);
+  assert.equal(existsSync(path.join(repo, '.governance', 'patches', 'adopt.patch')), true);
+  assert.equal(existsSync(path.join(repo, '.governance', 'manifest.json')), false);
+});
+
+test('adopt returns exit code 2 for blocked unsupported inference', () => {
+  const repo = setupRepo('gov-cli-adopt-blocked');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0', workspaces: ['packages/*'] }, null, 2),
+    'utf8'
+  );
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /adopt blocked/);
+  assert.equal(existsSync(path.join(repo, '.governance', 'adopt-report.md')), true);
+});
+
+test('adopt honors CLI preset override over unsupported inference', () => {
+  const repo = setupRepo('gov-cli-adopt-override');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0', workspaces: ['packages/*'] }, null, 2),
+    'utf8'
+  );
+
+  const result = run(['adopt', '--preset', 'generic'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /selectedPreset: generic \(source=cli\)/);
+});
+
+test('adopt report-only keeps blockers visible even when --force is provided', () => {
+  const repo = setupRepo('gov-cli-adopt-force-report');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0', workspaces: ['packages/*'] }, null, 2),
+    'utf8'
+  );
+
+  const result = run(['adopt', '--force'], repo);
+  assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /adopt blocked/);
+});
+
+test('adopt --apply blocks on dirty tree unless --force, and force path records snapshot', () => {
+  const repo = setupRepo('gov-cli-adopt-apply-safety');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  commitAll(repo, 'chore: baseline');
+
+  writeFileSync(path.join(repo, 'scratch.txt'), 'dirty\n', 'utf8');
+  const blocked = run(['adopt', '--apply'], repo);
+  assert.equal(blocked.status, 2, `${blocked.stdout}\n${blocked.stderr}`);
+  assert.match(blocked.stderr, /adopt apply blocked/);
+
+  const forced = run(['adopt', '--apply', '--force'], repo);
+  assert.equal(forced.status, 0, `${forced.stdout}\n${forced.stderr}`);
+  assert.equal(existsSync(path.join(repo, '.governance', 'manifest.json')), true);
+  assert.equal(existsSync(path.join(repo, '.governance', 'backups', 'index.json')), true);
+  assert.match(forced.stdout, /Rollback: npx @ramuks22\/ai-agent-governance rollback --to/);
+});
+
+test('--apply and --report are rejected outside adopt mode', () => {
+  const repo = setupRepo('gov-cli-adopt-flag-guard');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+
+  const applyInvalid = run(['check', '--apply'], repo);
+  assert.notEqual(applyInvalid.status, 0);
+  assert.match(applyInvalid.stderr, /--apply is only supported with --adopt/);
+
+  const reportInvalid = run(['check', '--report', 'tmp.md'], repo);
+  assert.notEqual(reportInvalid.status, 0);
+  assert.match(reportInvalid.stderr, /--report is only supported with --adopt/);
 });
 
 test('upgrade dry-run can emit deterministic patch output', () => {

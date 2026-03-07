@@ -38,6 +38,7 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
 5. **Upgrade or rollback managed artifacts when needed:**
    ```bash
    npx @ramuks22/ai-agent-governance upgrade --dry-run --patch
+   npx @ramuks22/ai-agent-governance adopt --report .governance/adopt-report.md
    npx @ramuks22/ai-agent-governance rollback --to latest --force
    ```
 
@@ -324,15 +325,30 @@ CLI equivalent (package mode):
 - `npx @ramuks22/ai-agent-governance ci-check --gate all`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
+- `npx @ramuks22/ai-agent-governance adopt`
+- `npx @ramuks22/ai-agent-governance adopt --apply --force`
 - `npx @ramuks22/ai-agent-governance rollback`
 
-### Stage 3 Upgrade/Rollback Notes
+### Stage 3/6 Migration Notes
 
 - `upgrade` is conflict-aware by default and writes no files when conflicts are found.
 - Use `--force` to overwrite conflicts; a backup snapshot is created before writes.
 - Use `--patch` (or `--patch=<path>`) to write deterministic patch output for review.
+- `adopt` is report-first by default and writes `.governance/adopt-report.md` plus `.governance/patches/adopt.patch`.
+- `adopt --apply` writes managed artifacts only when blockers are resolved; blocked migrations exit with code `2`.
+- `adopt --apply --force` can bypass managed-file and dirty-tree blockers and prints rollback guidance.
 - `rollback` restores files from `.governance/backups/index.json` (latest by default or `--to <backup-id>`).
 - Managed-block strategy applies to `.md/.yml/.yaml/.sh` and hook files; `.json` remains full-file checksum-managed.
+
+### Migration Troubleshooting (`adopt`)
+
+- Exit `2`: migration blockers detected (unsupported inferred stack, managed-file conflicts, or dirty tree for apply mode).
+- Use explicit overrides when inference is ambiguous: `--preset <name>` and `--hook-strategy <auto|core-hooks|git-hooks>`.
+- Review the generated report and patch before write operations:
+  - `.governance/adopt-report.md`
+  - `.governance/patches/adopt.patch`
+- If apply writes produce unwanted results, restore using snapshot rollback:
+  - `npx @ramuks22/ai-agent-governance rollback --to <snapshot-id>`
 
 Note: The `lint`, `format:check`, and `build` scripts in `package.json` are placeholders. Replace them with your project's real tooling.
 
@@ -341,7 +357,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 Stage 0-4 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard). Stage 5 is active via AG-GOV-027/028/029; Stage 6+ remains roadmap.
+- AG-GOV-003 Stage 0-5 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration). Stage 6 is active via AG-GOV-030/031/032; Stage 7+ remains roadmap.
 
 ## License
 
