@@ -18,6 +18,7 @@ Legacy/manual mode remains supported as fallback.
 
 - `docs/development/delivery-governance.md` - delivery rules and quality gates
 - `.agent/workflows/governance.md` - workflow rules and stop conditions
+- `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)` - canonical governance terminology
 - `.agent/workflows/requirements-workshop.md` - feature requirements workshop workflow
 - `.agent/workflows/merge-pr.md` - merge-by-command protocol
 - `docs/tracker.md` - tracker used by this repo

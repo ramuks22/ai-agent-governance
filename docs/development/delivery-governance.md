@@ -7,6 +7,7 @@ This document defines delivery rules, source of truth, and local quality gates.
 - Tracker: `docs/tracker.md`
 - Workflows: `.agent/workflows/*.md`
 - Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`
+- Terminology contract (canonical): `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)`
 - Branch protection contract (canonical): `.agent/workflows/governance.md` -> `Required Branch Protection for main`
 - Owner merge exception policy (if active): `.agent/workflows/governance.md` -> `Required Branch Protection for main` -> `Approved exception policy (timeboxed)`
 
@@ -69,7 +70,7 @@ If a `git push` fails and you intend to rerun the push using `--no-verify`:
 When an explicit merge command is given (e.g., "merge PR #<number> to main",
 "merge #<number> to main", "push #<number> to main and merge"):
 
-1. **Tracker finalization**: Mark associated tracker IDs as `Phase=Merge`, `State=Complete`, and add `PR #<number>` evidence.
+1. **Tracker finalization**: Mark associated tracker IDs as `Phase=Merge, State=Complete`, and add `PR #<number>` evidence.
    This explicit command authorizes finalization before merge.
 2. **Commit tracker updates** to the PR branch.
 3. **Sync PR checklist + evidence**: ensure governance-core checklist items and merge-command evidence are current in PR body.
@@ -81,16 +82,11 @@ When an explicit merge command is given (e.g., "merge PR #<number> to main",
 
 ## Definition of Done
 
-An item may move to finalization (`Phase=Merge`, `State=Complete`) only if:
+Canonical Definition of Done is in
+`.agent/workflows/governance.md` -> `Definition of Done`.
 
-- implementation matches acceptance criteria
-- tests are added/updated where reasonable
-- lint + format checks pass
-- build succeeds and budgets pass (if applicable)
-- no new security exposure is introduced
-- docs updated if behavior changed
-- applicability decision is recorded in PR body and tracker evidence references that PR
-- for feature-level work, requirements workshop is completed and linked in tracker evidence
-- workshop requirements are traceable to stakeholder concerns
-- PR merged to `main` (or explicitly approved exception)
-- tracker updated with PR reference and final phase/state (`Merge` + `Complete`)
+Delivery summary (for quick scanning):
+
+- Use the canonical checklist before finalization.
+- Applicability evidence must be present in PR body, and tracker evidence must reference that PR.
+- Final tracker state must be `Phase=Merge, State=Complete` with PR evidence (or an explicitly approved exception).

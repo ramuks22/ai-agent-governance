@@ -55,6 +55,7 @@ npm run governance:check
 | `.agent/workflows/governance.md` | Core governance checklist |
 | `.agent/workflows/requirements-workshop.md` | Feature requirements workshop workflow |
 | `.agent/workflows/merge-pr.md` | Merge-By-Command Protocol |
+| `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)` | Canonical governance terminology |
 | `docs/development/delivery-governance.md` | Full lifecycle framework |
 | `governance.config.json` | Project-specific configuration |
 
@@ -201,15 +202,16 @@ This framework is tool-agnostic and works with any AI coding assistant that supp
 
 ## Merge-by-Command Protocol
 
-When an explicit merge command is given (e.g., "merge PR #123 to main"), follow the five-step checklist in `.agent/workflows/merge-pr.md`:
+When an explicit merge command is given (e.g., "merge PR #123 to main"), follow the six-step checklist in `.agent/workflows/merge-pr.md`:
 
-1. **Update tracker** – Set IDs to `Phase=Merge`, `State=Complete`, and add `PR #<number>` evidence
+1. **Update tracker** – Set IDs to `Phase=Merge, State=Complete`, and add `PR #<number>` evidence
 2. **Commit + push** – Push tracker updates to PR branch
-3. **Merge PR** – Merge to main
-4. **Branch cleanup** – Delete remote and local branches
-5. **Sync main** – Pull latest changes
+3. **Sync checklist + checks** – Ensure checklist/evidence is current and wait for required checks
+4. **Merge PR** – Merge to main
+5. **Branch cleanup** – Delete remote and local branches
+6. **Sync main** – Pull latest changes
 
-This protocol permits tracker finalization (`Merge` + `Complete`) **before** merge, as a documented exception with audit evidence.
+This protocol permits tracker finalization (`Phase=Merge, State=Complete`) **before** merge, as a documented exception with audit evidence.
 
 ## Requirements Workshop (Feature-Level Work)
 
