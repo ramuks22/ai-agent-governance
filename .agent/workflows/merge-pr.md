@@ -49,6 +49,7 @@ git push
 
 - Update PR checklist core items in the PR body so they reflect current tracker evidence state
 - Confirm merge-command evidence is present in the PR body
+- Keep `Merge-by-command` unchecked until that evidence is present
 - Wait for required checks to pass before merge:
 
 // turbo
@@ -89,7 +90,7 @@ git pull origin main
 The PR body must contain one of:
 
 - A quoted command message (e.g., `> merge PR #123 to main`)
-- A link to the command message
+- A matching GitHub PR comment link (e.g., `https://github.com/<owner>/<repo>/pull/<number>#issuecomment-...`)
 - For human merges: A note stating "Manual merge per governance protocol"
 
 ## Governance Tie-In

@@ -76,3 +76,101 @@ test('passes with required applicability and complete hotfix contract', () => {
   const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
   assert.deepStrictEqual(result.issues, []);
 });
+
+test('fails when merge-by-command is checked before merge evidence exists', () => {
+  const body = [
+    '## Tracker',
+    '- IDs: AG-GOV-020',
+    'Applicability: Not Required — Reason: docs-only change',
+    '## Non-negotiable checklist',
+    '- [x] **Merge-by-command** (required for AI-assisted merges): Quoted command or link included',
+  ].join('\n');
+
+  const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
+  assert.ok(
+    result.issues.some((issue) =>
+      issue.includes('Merge-by-command checklist item cannot be checked until merge command evidence is present')
+    )
+  );
+});
+
+test('passes when merge-by-command is checked and merge command evidence is present', () => {
+  const body = [
+    '## Tracker',
+    '- IDs: AG-GOV-020',
+    'Applicability: Not Required — Reason: docs-only change',
+    '## Non-negotiable checklist',
+    '- [x] **Merge-by-command** (required for AI-assisted merges): Quoted command or link included',
+    '> merge PR #21 to main',
+  ].join('\n');
+
+  const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
+  assert.deepStrictEqual(result.issues, []);
+});
+
+test('fails when merge-by-command checklist appears more than once', () => {
+  const body = [
+    '## Tracker',
+    '- IDs: AG-GOV-020',
+    'Applicability: Not Required — Reason: docs-only change',
+    '## Non-negotiable checklist',
+    '- [ ] **Merge-by-command** (required for AI-assisted merges): Quoted command or link included',
+    '- [x] **Merge-by-command** (required for AI-assisted merges): Quoted command or link included',
+    '> merge PR #21 to main',
+  ].join('\n');
+
+  const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
+  assert.ok(
+    result.issues.some((issue) => issue.includes('Merge-by-command checklist item must appear at most once'))
+  );
+});
+
+test('fails when merge command references a different PR number', () => {
+  const body = [
+    '## Tracker',
+    '- IDs: AG-GOV-020',
+    'Applicability: Not Required — Reason: docs-only change',
+    '## Non-negotiable checklist',
+    '- [x] **Merge-by-command** (required for AI-assisted merges): Quoted command or link included',
+    '> merge PR #99 to main',
+  ].join('\n');
+
+  const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
+  assert.ok(
+    result.issues.some((issue) =>
+      issue.includes('Merge-by-command checklist item cannot be checked until merge command evidence is present for PR #21')
+    )
+  );
+});
+
+test('fails when merge-by-command is checked with a generic merge markdown link', () => {
+  const body = [
+    '## Tracker',
+    '- IDs: AG-GOV-020',
+    'Applicability: Not Required — Reason: docs-only change',
+    '## Non-negotiable checklist',
+    '- [x] **Merge-by-command** (required for AI-assisted merges): Quoted command or link included',
+    '[merge docs](https://example.com/some-page)',
+  ].join('\n');
+
+  const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
+  assert.ok(
+    result.issues.some((issue) =>
+      issue.includes('Merge-by-command checklist item cannot be checked until merge command evidence is present for PR #21')
+    )
+  );
+});
+
+test('passes when merge-by-command is checked with matching GitHub issuecomment link', () => {
+  const body = [
+    '## Tracker',
+    '- IDs: AG-GOV-020',
+    'Applicability: Not Required — Reason: docs-only change',
+    '## Non-negotiable checklist',
+    '- [x] **Merge-by-command** (required for AI-assisted merges): Quoted command or link included',
+    'https://github.com/ramuks22/ai-agent-governance/pull/21#issuecomment-1234567890',
+  ].join('\n');
+
+  const result = validatePrChecklist({ body, trackerText: BASE_TRACKER, prNumber: 21 });
+  assert.deepStrictEqual(result.issues, []);
+});
