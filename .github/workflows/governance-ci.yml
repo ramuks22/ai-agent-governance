@@ -26,10 +26,7 @@ jobs:
         run: npm ci
 
       - name: Governance Check
-        run: npm run governance:check
+        run: npx --no-install ai-governance check
 
-      - name: Pre-commit Gates (format, lint, secret scan)
-        run: npm run gate:precommit
-
-      - name: Pre-push Gates (tests, build)
-        run: npm run gate:prepush
+      - name: CI Check (pre-commit + pre-push gates)
+        run: npx --no-install ai-governance ci-check --gate all

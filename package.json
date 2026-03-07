@@ -13,6 +13,7 @@
   "scripts": {
     "test": "node --test scripts/__tests__/*.test.mjs",
     "governance:check": "node scripts/governance-check.mjs",
+    "governance:ci-check": "node scripts/governance-check.mjs --ci-check --gate all",
     "governance:doctor": "node scripts/governance-check.mjs --doctor",
     "governance:init": "node scripts/governance-check.mjs --init",
     "gate:precommit": "node scripts/gates.mjs pre-commit",

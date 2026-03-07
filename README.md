@@ -29,6 +29,7 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
 3. **Verify setup:**
    ```bash
    npx @ramuks22/ai-agent-governance check
+   npx @ramuks22/ai-agent-governance ci-check --gate all
    npx @ramuks22/ai-agent-governance doctor
    ```
 
@@ -99,7 +100,8 @@ npm run governance:check
 │   ├── install-githooks.mjs          # Hook installation
 │   └── governance-check.mjs          # Self-check script
 └── .github/workflows/
-    └── governance-ci.yml             # CI parity workflow
+    ├── governance-ci.yml             # CI parity workflow (direct)
+    └── governance-ci-reusable.yml    # Reusable CI workflow via workflow_call
 ```
 
 ## Configuration
@@ -253,9 +255,42 @@ Local hooks are the first line of defense, but CI is the ultimate gate.
 
 ### Setup
 
-1. Copy `.github/workflows/governance-ci.yml` to your repo
-2. Ensure your `governance.config.json` gates match CI steps
-3. Enable branch protection requiring CI pass
+1. Choose one integration path:
+   - Direct workflow copy: `.github/workflows/governance-ci.yml`
+   - Reusable workflow call (pinned ref): `.github/workflows/governance-ci-reusable.yml`
+2. Ensure your `governance.config.json` gates match `ci-check` execution.
+3. Enable branch protection requiring CI pass.
+
+### Reusable Workflow (Pinned Ref Example)
+
+```yaml
+name: Governance
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  governance:
+    uses: ramuks22/ai-agent-governance/.github/workflows/governance-ci-reusable.yml@<PINNED_TAG_OR_SHA>
+    with:
+      package_version: "<PINNED_PACKAGE_VERSION>"
+      install_command: "npm ci"
+```
+
+### GitLab / Bitbucket (Pinned Version Commands)
+
+Use a pinned package version in pipeline commands:
+
+```bash
+npx --yes @ramuks22/ai-agent-governance@<PINNED_PACKAGE_VERSION> check
+npx --yes @ramuks22/ai-agent-governance@<PINNED_PACKAGE_VERSION> ci-check --gate all
+```
+
+For pnpm/yarn repositories using the reusable GitHub workflow, set
+`install_command` to your package-manager equivalent.
 
 ### Why Required?
 
@@ -268,8 +303,7 @@ Local hooks are the first line of defense, but CI is the ultimate gate.
 The included workflow:
 - Uses Node version from `.nvmrc`
 - Runs governance self-check
-- Executes pre-commit gates (format, lint)
-- Executes pre-push gates (test, build)
+- Runs `ci-check` for deterministic pre-commit + pre-push gate parity
 
 ## Scripts Reference
 
@@ -277,6 +311,7 @@ The included workflow:
 |--------|-------------|
 | `npm run governance:check` | Validate config, hooks, and tracker |
 | `npm run governance:doctor` | Detailed diagnostics for config, hooks, tracker, and manifest |
+| `npm run governance:ci-check` | Run configured gates in CI parity mode (`--gate all` by default) |
 | `npm run governance:init` | Create config and tracker from templates |
 | `npm run gate:precommit` | Run pre-commit gates manually |
 | `npm run gate:prepush` | Run pre-push gates manually |
@@ -286,6 +321,7 @@ CLI equivalent (package mode):
 - `npx @ramuks22/ai-agent-governance init`
 - `npx @ramuks22/ai-agent-governance init --wizard`
 - `npx @ramuks22/ai-agent-governance check`
+- `npx @ramuks22/ai-agent-governance ci-check --gate all`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
 - `npx @ramuks22/ai-agent-governance rollback`
@@ -305,7 +341,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 Stage 0-3 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling). Stage 4 is in progress via AG-GOV-024/025/026; Stage 5+ remains roadmap.
+- AG-GOV-003 Stage 0-4 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard). Stage 5 is active via AG-GOV-027/028/029; Stage 6+ remains roadmap.
 
 ## License
 

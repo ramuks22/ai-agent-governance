@@ -5,6 +5,7 @@ import {
   writeFileSync,
   mkdirSync,
   chmodSync,
+  readdirSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import readline from 'node:readline/promises';
@@ -149,6 +150,7 @@ const ARTIFACT_FILES = [
   'docs/templates/requirements-workshop-template.md',
   '.github/pull_request_template.md',
   '.github/workflows/governance-ci.yml',
+  '.github/workflows/governance-ci-reusable.yml',
   EXAMPLE_CONFIG_PATH,
   SCHEMA_PATH,
 ];
@@ -311,6 +313,19 @@ function runCommand(command, args) {
   };
 }
 
+function runShellCommand(commandText) {
+  const result = spawnSync(commandText, {
+    encoding: 'utf8',
+    shell: true,
+    stdio: 'inherit',
+    cwd: TARGET_ROOT,
+  });
+  return {
+    ok: result.status === 0,
+    status: result.status ?? 1,
+  };
+}
+
 function ensureDir(filePath) {
   mkdirSync(path.dirname(filePath), { recursive: true });
 }
@@ -351,6 +366,7 @@ function isGitRepo() {
 function parseArgs(argv) {
   const isCI = process.env.CI === 'true';
   let presetProvided = false;
+  let gateProvided = false;
   const options = {
     mode: 'check',
     skipHooks: isCI,
@@ -362,12 +378,14 @@ function parseArgs(argv) {
     wizard: false,
     hookStrategy: 'auto',
     configPath: process.env.GOVERNANCE_CONFIG || CONFIG_PATH,
+    ciGate: 'all',
   };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--init') options.mode = 'init';
     else if (arg === '--doctor') options.mode = 'doctor';
+    else if (arg === '--ci-check') options.mode = 'ci-check';
     else if (arg === '--upgrade') options.mode = 'upgrade';
     else if (arg === '--rollback') options.mode = 'rollback';
     else if (arg === '--skip-hooks') options.skipHooks = true;
@@ -397,6 +415,13 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg.startsWith('--hook-strategy=')) {
       options.hookStrategy = arg.split('=')[1];
+    } else if (arg === '--gate' && argv[i + 1]) {
+      options.ciGate = argv[i + 1];
+      gateProvided = true;
+      i += 1;
+    } else if (arg.startsWith('--gate=')) {
+      options.ciGate = arg.split('=')[1];
+      gateProvided = true;
     } else {
       fail(`✖ Unknown option: ${arg}`);
     }
@@ -418,6 +443,14 @@ function parseArgs(argv) {
     fail('✖ --wizard is only supported with --init.');
   }
 
+  if (options.mode !== 'ci-check' && gateProvided) {
+    fail('✖ --gate is only supported with --ci-check.');
+  }
+
+  if (!['precommit', 'prepush', 'all'].includes(options.ciGate)) {
+    fail("✖ Invalid --gate value. Allowed: precommit, prepush, all");
+  }
+
   if (!['auto', 'core-hooks', 'git-hooks'].includes(options.hookStrategy)) {
     fail("✖ Invalid hook strategy. Allowed: auto, core-hooks, git-hooks");
   }
@@ -431,6 +464,7 @@ Usage: node scripts/governance-check.mjs [options]
 
 Modes:
   --init                Initialize governance artifacts
+  --ci-check            Run configured governance gates for CI parity
   --doctor              Show detailed diagnostics
   --upgrade             Upgrade managed governance artifacts
   --rollback            Restore artifacts from backup snapshot
@@ -443,12 +477,14 @@ Options:
   --force               Overwrite conflicts or bypass rollback clean-tree check
   --patch[=<path>]      Write deterministic patch output during upgrade planning
   --to <backup-id>      Backup ID for rollback target (default: latest)
+  --gate <name>         Gate scope for --ci-check: precommit|prepush|all
   --skip-hooks          Skip hook validation (also auto-skipped when CI=true)
   --help, -h            Show this help message
 
 Examples:
   node scripts/governance-check.mjs --init --preset node-npm-cjs --hook-strategy auto
   node scripts/governance-check.mjs --init --wizard --hook-strategy auto
+  node scripts/governance-check.mjs --ci-check --gate all
   node scripts/governance-check.mjs --upgrade --dry-run --patch
   node scripts/governance-check.mjs --rollback --to latest --force
   node scripts/governance-check.mjs --doctor
@@ -1327,6 +1363,129 @@ function runCheck(options) {
   info(`[governance] Configuration valid${options.skipHooks ? '.' : ' and hooks installed.'}`);
 }
 
+const CI_CHECK_RECURSION_PATTERNS = [
+  /\bai-governance(?:\.mjs)?\s+ci-check\b/i,
+  /@ramuks22\/ai-agent-governance(?:@[^\s'"]+)?\s+ci-check\b/i,
+  /\bgovernance-check\.mjs\b[^\n\r]*\s--ci-check\b/i,
+  /\bnpm\s+run(?:\s+-s)?\s+governance:ci-check\b/i,
+  /\bpnpm\s+run\s+governance:ci-check\b/i,
+  /\byarn\s+run\s+governance:ci-check\b/i,
+];
+
+function ensureNoCiCheckRecursion(commands, gateLabel) {
+  for (const commandText of commands) {
+    const recursive = CI_CHECK_RECURSION_PATTERNS.some((pattern) => pattern.test(commandText));
+    if (recursive) {
+      fail(
+        `✖ Recursive ci-check command detected in ${gateLabel}: "${commandText}". ` +
+        'Remove ci-check self-invocation from gate commands.'
+      );
+    }
+  }
+}
+
+function runCiGateCommands(commands, gateLabel) {
+  ensureNoCiCheckRecursion(commands, gateLabel);
+  for (const commandText of commands) {
+    info(`[governance:ci-check] ${gateLabel}: ${commandText}`);
+    const result = runShellCommand(commandText);
+    if (!result.ok) {
+      fail(`✖ ci-check failed during ${gateLabel}: "${commandText}"`);
+    }
+  }
+}
+
+function runCiCheck(options) {
+  const config = validateConfig(options.configPath);
+  checkNodeVersion(config.node.minVersion);
+  checkTrackerExists(config.tracker.path);
+
+  const scopes = {
+    precommit: { label: 'preCommit', commands: config.gates.preCommit || [] },
+    prepush: { label: 'prePush', commands: config.gates.prePush || [] },
+  };
+
+  const selected = options.ciGate === 'all' ? ['precommit', 'prepush'] : [options.ciGate];
+  for (const key of selected) {
+    const scope = scopes[key];
+    runCiGateCommands(scope.commands, scope.label);
+  }
+
+  info(`[governance:ci-check] PASS (gate=${options.ciGate})`);
+}
+
+function collectSupportedCiFiles() {
+  const files = [];
+  const githubWorkflowsDir = targetPath(path.join('.github', 'workflows'));
+  if (existsSync(githubWorkflowsDir)) {
+    for (const name of readdirSync(githubWorkflowsDir)) {
+      if (name.endsWith('.yml') || name.endsWith('.yaml')) {
+        files.push(path.posix.join('.github/workflows', name));
+      }
+    }
+  }
+
+  for (const ciFile of ['.gitlab-ci.yml', 'bitbucket-pipelines.yml']) {
+    if (existsSync(targetPath(ciFile))) {
+      files.push(ciFile);
+    }
+  }
+
+  return files.sort();
+}
+
+function hasCiParityInvocation(content) {
+  return (
+    /\bai-governance(?:\.mjs)?\s+ci-check\b/i.test(content)
+    || /@ramuks22\/ai-agent-governance(?:@[^\s'"]+)?[^\n\r]*\bci-check\b/i.test(content)
+    || /uses:\s*\.\/\.github\/workflows\/governance-ci-reusable\.yml\b/i.test(content)
+    || /uses:\s*(?:\.\/|[\w.-]+\/[\w.-]+\/)\.github\/workflows\/governance-ci-reusable\.yml@/i.test(content)
+  );
+}
+
+function evaluateCiParity() {
+  const ciFiles = collectSupportedCiFiles();
+  if (ciFiles.length === 0) {
+    return {
+      ok: false,
+      detail: 'no supported CI files found (.github/workflows/*.yml|*.yaml, .gitlab-ci.yml, bitbucket-pipelines.yml)',
+    };
+  }
+
+  const matches = [];
+  const unreadable = [];
+  for (const relPath of ciFiles) {
+    const absPath = targetPath(relPath);
+    try {
+      const content = readFileSync(absPath, 'utf8');
+      if (hasCiParityInvocation(content)) {
+        matches.push(relPath);
+      }
+    } catch {
+      unreadable.push(relPath);
+    }
+  }
+
+  if (matches.length > 0) {
+    return {
+      ok: true,
+      detail: `ci-check invocation found in ${matches.join(', ')}`,
+    };
+  }
+
+  if (unreadable.length > 0) {
+    return {
+      ok: false,
+      detail: `supported CI files present but unreadable: ${unreadable.join(', ')}; add ci-check invocation or governance-ci-reusable workflow usage`,
+    };
+  }
+
+  return {
+    ok: false,
+    detail: `supported CI files found (${ciFiles.join(', ')}) but none invoke ci-check or use governance-ci-reusable workflow; add "npx --no-install ai-governance ci-check --gate all"`,
+  };
+}
+
 function runDoctor(options) {
   const checks = [];
 
@@ -1369,6 +1528,9 @@ function runDoctor(options) {
   } else {
     add('tracker-file', false, 'tracker.path missing in config');
   }
+
+  const ciParity = evaluateCiParity();
+  add('ci-parity', ciParity.ok, ciParity.detail);
 
   const manifest = readManifest();
   add('manifest-file', Boolean(manifest), MANIFEST_PATH);
@@ -1479,6 +1641,11 @@ async function main() {
 
   if (options.mode === 'doctor') {
     runDoctor(options);
+    process.exit(0);
+  }
+
+  if (options.mode === 'ci-check') {
+    runCiCheck(options);
     process.exit(0);
   }
 
