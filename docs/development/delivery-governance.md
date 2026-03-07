@@ -6,6 +6,7 @@ This document defines delivery rules, source of truth, and local quality gates.
 
 - Tracker: `docs/tracker.md`
 - Workflows: `.agent/workflows/*.md`
+- Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`
 
 ## Tracking Rules
 

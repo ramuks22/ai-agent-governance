@@ -127,6 +127,53 @@ command message.
 - [ ] Tracker phase/state set to `Merge / Complete` only after PR is merged to `main`
       (or explicit approved exception)
 
+## Governance Consistency Review (Monthly)
+
+This section is the canonical source for monthly governance drift review. Other docs should
+reference this section instead of duplicating review logic.
+
+Cadence and owner:
+
+- Frequency: monthly (one recorded review result per calendar month)
+- Default reviewer: governance maintainer
+- Manual process only (no automation tooling required)
+
+Review scope:
+
+- `AGENTS.md`
+- `.agent/workflows/governance.md`
+- `.agent/workflows/requirements-workshop.md`
+- `.agent/workflows/merge-pr.md`
+- `docs/development/delivery-governance.md`
+- `.github/pull_request_template.md`
+- `docs/tracker.md` (guidance + findings table semantics)
+
+Monthly checklist (all items required):
+
+1. Applicability rule semantics match across scoped docs.
+2. Exempt-category terminology matches canonical wording exactly.
+3. Applicability evidence format and PR-to-tracker linkage semantics match.
+4. Exception policy fields match (reason, approvers, due date, 2-business-day SLA).
+5. Merge-by-command trigger phrases are consistent.
+6. Merge-by-command step order is consistent.
+7. Bypass policy is consistent (`--no-verify` requires explicit user approval).
+8. Definition-of-Done criteria are consistent (workshop traceability + phase/state finalization conditions).
+
+Output and evidence format:
+
+- Record result in tracker evidence as:
+  - `YYYY-MM-DD | Reviewer=<name> | Result=PASS|DRIFT_FOUND | DriftItems=<none|IDs>`
+
+Drift handling:
+
+1. If result is `DRIFT_FOUND`, create or update tracker item(s) before marking review complete.
+2. Each drift item must include severity and due date.
+3. Do not treat drift as resolved until tracked follow-ups are recorded.
+
+Scope maintenance rule:
+
+- When adding a new governance source-of-truth document, update this review scope list in the same PR.
+
 ## Violations (Stop Conditions)
 
 | Violation                                             | Outcome |
