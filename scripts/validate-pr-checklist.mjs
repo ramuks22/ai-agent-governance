@@ -72,38 +72,41 @@ function parseHotfix(body) {
 }
 
 function parseMergeByCommandChecklist(body) {
-  const checklistMatch = body.match(/^- \[(x|X| )\]\s*\*\*Merge-by-command\*\*.*$/im);
-  if (!checklistMatch) {
-    return { found: false, checked: false };
-  }
-  return {
-    found: true,
-    checked: checklistMatch[1].toLowerCase() === 'x',
-  };
+  const checklistMatches = [...body.matchAll(/^- \[(x|X| )\]\s*\*\*Merge-by-command\*\*.*$/gim)];
+  return checklistMatches.map((match) => ({
+    checked: match[1].toLowerCase() === 'x',
+    line: match[0],
+  }));
 }
 
-function hasMergeCommandEvidence(body) {
-  if (/(^|\n)\s*>\s*(merge PR #\d+ to main|merge #\d+ to main|push #\d+ to main and merge)\b/im.test(body)) {
+function hasMergeCommandForCurrentPr(body, prNumber) {
+  const mergeCommandMatches = [
+    ...body.matchAll(/\bmerge PR #(\d+) to main\b/gi),
+    ...body.matchAll(/\bmerge #(\d+) to main\b/gi),
+    ...body.matchAll(/\bpush #(\d+) to main and merge\b/gi),
+  ];
+
+  return mergeCommandMatches.some((match) => Number(match[1]) === Number(prNumber));
+}
+
+function hasMergeCommandLinkForCurrentPr(body, prNumber) {
+  const commandLinkMatches = [
+    ...body.matchAll(/https?:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/(\d+)(?:\/?#issuecomment-\d+)/gi),
+  ];
+
+  return commandLinkMatches.some((match) => Number(match[1]) === Number(prNumber));
+}
+
+function hasMergeCommandEvidence(body, prNumber) {
+  if (hasMergeCommandForCurrentPr(body, prNumber)) {
     return true;
   }
 
-  if (/(^|\n)\s*(merge PR #\d+ to main|merge #\d+ to main|push #\d+ to main and merge)\b/im.test(body)) {
+  if (hasMergeCommandLinkForCurrentPr(body, prNumber)) {
     return true;
   }
 
-  if (/Manual merge per governance protocol/i.test(body)) {
-    return true;
-  }
-
-  if (/\[[^\]]*merge[^\]]*\]\(https?:\/\/[^)]+\)/i.test(body)) {
-    return true;
-  }
-
-  if (/(merge command|command message|merge evidence).*(https?:\/\/\S+)/i.test(body)) {
-    return true;
-  }
-
-  return false;
+  return /Manual merge per governance protocol/i.test(body);
 }
 
 function validateTrackerEvidence(trackerIds, trackerText, prNumber) {
@@ -150,9 +153,16 @@ export function validatePrChecklist({ body, trackerText, prNumber }) {
     }
   }
 
-  const mergeByCommand = parseMergeByCommandChecklist(body || '');
-  if (mergeByCommand.checked && !hasMergeCommandEvidence(body || '')) {
-    issues.push('Merge-by-command checklist item cannot be checked until merge command evidence is present (quoted command, merge command link, or "Manual merge per governance protocol").');
+  const mergeByCommandEntries = parseMergeByCommandChecklist(body || '');
+  if (mergeByCommandEntries.length > 1) {
+    issues.push('Merge-by-command checklist item must appear at most once in the PR body.');
+  }
+
+  const mergeByCommandChecked = mergeByCommandEntries.some((entry) => entry.checked);
+  if (mergeByCommandChecked && !hasMergeCommandEvidence(body || '', prNumber)) {
+    issues.push(
+      `Merge-by-command checklist item cannot be checked until merge command evidence is present for PR #${prNumber} (quoted command, matching GitHub issuecomment link, or "Manual merge per governance protocol").`
+    );
   }
 
   if (trackerIds.length > 0) {

@@ -90,7 +90,7 @@ git pull origin main
 The PR body must contain one of:
 
 - A quoted command message (e.g., `> merge PR #123 to main`)
-- A link to the command message
+- A matching GitHub PR comment link (e.g., `https://github.com/<owner>/<repo>/pull/<number>#issuecomment-...`)
 - For human merges: A note stating "Manual merge per governance protocol"
 
 ## Governance Tie-In

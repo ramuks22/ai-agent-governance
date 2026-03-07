@@ -60,7 +60,7 @@
 - Assumptions challenged: reviewers will always catch premature checks manually.
 - Risks identified: merge-step confusion and audit drift.
 - Constraints imposed: accepted evidence must match merge workflow wording.
-- Requirement(s) insisted: accepted evidence types are quoted command, link, or manual merge note.
+- Requirement(s) insisted: accepted evidence types are quoted command, matching GitHub issuecomment link, or manual merge note.
 - Disagreements: none.
 
 ## Role 3: Skeptical Reviewer
@@ -88,7 +88,7 @@
 | Requirement ID | Requirement Statement | Source Role(s) | Priority | Acceptance Criterion / Validation |
 | --- | --- | --- | --- | --- |
 | FR-001 | `pr-checklist` must fail when `Merge-by-command` is checked and no merge command evidence exists. | Governance Maintainer, Skeptical Reviewer | Must | Validator returns a failure issue for checked-without-evidence PR bodies. |
-| FR-002 | Accepted merge evidence must align to merge workflow: quoted command, command-message link, or manual merge note. | Delivery Owner | Must | Validator passes checked item when one accepted evidence format is present. |
+| FR-002 | Accepted merge evidence must align to merge workflow: quoted command, matching GitHub issuecomment link, or manual merge note. | Delivery Owner | Must | Validator passes checked item when one accepted evidence format is present. |
 | FR-003 | Keep draft behavior lightweight by allowing unchecked `Merge-by-command` without evidence. | Repo Contributor | Must | Validator does not fail on unchecked merge-by-command state. |
 
 ## Non-Functional Requirements
@@ -130,7 +130,7 @@
 # Open Questions
 
 - OQ-001: Should future hardening require the merge-by-command checklist line to exist in all PR bodies?
-- OQ-002: Should link evidence be narrowed to GitHub comment links only?
+- OQ-002: Resolved in implementation: link evidence is narrowed to matching GitHub issuecomment links only.
 
 # Priority and Next Actions
 
