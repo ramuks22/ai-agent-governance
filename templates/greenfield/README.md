@@ -4,13 +4,19 @@ This template is for net-new repositories.
 
 ## Bootstrap
 
-1. Install dependencies:
+1. Initialize git if this project was scaffolded with `degit`:
+
+```bash
+git init
+```
+
+2. Install dependencies:
 
 ```bash
 npm install
 ```
 
-2. Bootstrap governance artifacts and checks:
+3. Bootstrap governance artifacts and checks:
 
 ```bash
 npm run governance:bootstrap

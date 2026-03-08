@@ -77,6 +77,7 @@ Choose one path based on repository state:
 ```bash
 npx degit ramuks22/ai-agent-governance/templates/greenfield my-new-project
 cd my-new-project
+git init
 npm install
 npm run governance:bootstrap
 ```

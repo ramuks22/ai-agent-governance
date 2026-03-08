@@ -20,7 +20,7 @@ Legacy/manual mode remains supported as fallback.
 
 Onboarding split:
 
-- Greenfield repos: scaffold from `templates/greenfield` (degit or GitHub Template), then run `npm run governance:bootstrap`.
+- Greenfield repos: scaffold from `templates/greenfield` (degit or GitHub Template), then run `npm run governance:bootstrap` (`degit` users run `git init` first).
 - Existing repos: use Stage 6 migration (`adopt`) commands.
 
 ## Source of Truth
