@@ -25,6 +25,7 @@ Consumer command:
 ```bash
 npx degit ramuks22/ai-agent-governance/templates/greenfield my-new-project
 cd my-new-project
+git init
 npm install
 npm run governance:bootstrap
 ```
@@ -59,6 +60,59 @@ Create or update a dedicated template repository from `templates/greenfield`:
 1. `templates/greenfield/package.json` contains pinned package version.
 2. `templates/greenfield/package.json` contains `governance:bootstrap`.
 3. Fresh scaffold run completes:
+   - `git init` (required for degit scaffolds)
    - `npm install`
    - `npm run governance:bootstrap`
 4. Onboarding docs keep explicit greenfield vs existing split.
+
+## Deterministic Validation Commands (AG-GOV-035)
+
+Run from repository root:
+
+1. Template pin + script contract:
+
+```bash
+node -e '
+const pkg = require("./templates/greenfield/package.json");
+const version = pkg.devDependencies?.["@ramuks22/ai-agent-governance"];
+const scripts = pkg.scripts ?? {};
+const requiredScripts = ["governance:init", "governance:check", "governance:doctor", "governance:bootstrap"];
+const missingScripts = requiredScripts.filter((name) => !scripts[name]);
+if (!version || !/^\\d+\\.\\d+\\.\\d+$/.test(version)) {
+  console.error("Expected pinned @ramuks22/ai-agent-governance version.");
+  process.exit(1);
+}
+if (missingScripts.length > 0) {
+  console.error("Missing scripts:", missingScripts.join(", "));
+  process.exit(1);
+}
+'
+```
+
+2. Onboarding split guidance present:
+
+```bash
+rg -n "Onboarding Paths \\(Stage 7\\)|Greenfield Path \\(Template\\)|Existing Repository Path \\(Migration\\)" README.md
+rg -n "Onboarding split|Greenfield repos: scaffold from `templates/greenfield`|Existing repos: use Stage 6 migration \\(`adopt`\\) commands\\." docs/README.md
+```
+
+3. Runbook includes both distribution methods:
+
+```bash
+rg -n "degit|GitHub Template repository" docs/development/greenfield-template-publication-runbook.md
+```
+
+4. Local smoke test for unpublished package state (this repository):
+
+```bash
+REPO_ROOT="$PWD"
+PACK_FILE="$(npm pack --silent)"
+TMP_DIR="$(mktemp -d)"
+cp -R templates/greenfield/. "$TMP_DIR"
+cd "$TMP_DIR"
+git init -q
+npm install --save-dev "$REPO_ROOT/$PACK_FILE" --silent
+npm run governance:bootstrap
+cd "$REPO_ROOT"
+rm -f "$PACK_FILE"
+```
