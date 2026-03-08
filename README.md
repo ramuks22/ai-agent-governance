@@ -113,6 +113,7 @@ npx @ramuks22/ai-agent-governance adopt --apply
 | `.agent/workflows/merge-pr.md` | Merge-By-Command Protocol |
 | `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)` | Canonical governance terminology |
 | `docs/development/delivery-governance.md` | Full lifecycle framework |
+| `docs/development/release-maintenance-policy.md` | Canonical release maintenance policy, support SLA, compatibility matrix, and offline install contract |
 | `governance.config.json` | Project-specific configuration |
 
 ## What's Included
@@ -400,10 +401,11 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 
 ## Support and Updates
 
+- Canonical release/maintenance policy: `docs/development/release-maintenance-policy.md`
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 Stage 0-6 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration). Stage 7 is active via AG-GOV-033/034/035; Stage 8+ remains roadmap.
+- AG-GOV-003 Stage 0-7 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration + greenfield template). Stage 8 is active via AG-GOV-036/037/038; Stage 9+ remains roadmap.
 
 ## License
 

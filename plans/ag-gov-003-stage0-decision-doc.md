@@ -18,6 +18,10 @@ Deferred after v1.0:
 - CI provider adapters beyond existing GitHub docs
 - Telemetry and analytics
 
+Legacy boundary note:
+
+- This document is the historical v1.0 baseline and is not the canonical source for ongoing release/maintenance policy; see `docs/development/release-maintenance-policy.md`.
+
 ## 2. Support Matrix (v1.0)
 
 - Runtime: Node.js only
