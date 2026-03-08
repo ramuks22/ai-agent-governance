@@ -33,6 +33,7 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
    npx @ramuks22/ai-agent-governance ci-check --gate all
    npx @ramuks22/ai-agent-governance release-check --scope all
    npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check
+   npx @ramuks22/ai-agent-governance release-publish --out-dir .governance/release-check
    npx @ramuks22/ai-agent-governance doctor
    ```
 
@@ -148,7 +149,9 @@ npx @ramuks22/ai-agent-governance adopt --apply
 │   └── governance-check.mjs          # Self-check script
 └── .github/workflows/
     ├── governance-ci.yml             # CI parity workflow (direct)
-    └── governance-ci-reusable.yml    # Reusable CI workflow via workflow_call
+    ├── governance-ci-reusable.yml    # Reusable CI workflow via workflow_call
+    ├── release-check.yml             # On-demand release preflight workflow
+    └── release-publish.yml           # Manual release execution workflow
 ```
 
 ## Configuration
@@ -364,6 +367,7 @@ The included workflow:
 | `npm run governance:doctor` | Detailed diagnostics for config, hooks, tracker, and manifest |
 | `npm run governance:ci-check` | Run configured gates in CI parity mode (`--gate all` by default) |
 | `npm run governance:release-check` | Run release maintenance + distribution dry-run preflight checks |
+| `npm run governance:release-publish` | Run controlled publish readiness checks (dry-run default) |
 | `npm run governance:init` | Create config and tracker from templates |
 | `npm run gate:precommit` | Run pre-commit gates manually |
 | `npm run gate:prepush` | Run pre-push gates manually |
@@ -376,6 +380,8 @@ CLI equivalent (package mode):
 - `npx @ramuks22/ai-agent-governance ci-check --gate all`
 - `npx @ramuks22/ai-agent-governance release-check --scope all`
 - `npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check`
+- `npx @ramuks22/ai-agent-governance release-publish --out-dir .governance/release-check`
+- `npx @ramuks22/ai-agent-governance release-publish --apply --dist-tag next --tag v1.2.3 --out-dir .governance/release-check`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
 - `npx @ramuks22/ai-agent-governance adopt`
@@ -403,6 +409,23 @@ CLI equivalent (package mode):
 - If apply writes produce unwanted results, restore using snapshot rollback:
   - `npx @ramuks22/ai-agent-governance rollback --to <snapshot-id>`
 
+### Stage 11 Release Execution Notes
+
+- `release-publish` is dry-run by default and always writes:
+  - `.governance/release-check/release-plan.json`
+  - `.governance/release-check/release-plan.md`
+- `release-publish --apply` executes publish in strict order:
+  1. `npm publish --access public --tag <dist-tag>`
+  2. create annotated git tag (`--tag` or default `v<package.json.version>`)
+  3. push tag to origin
+- Dist-tag vs git-tag:
+  - Dist-tag (`--dist-tag latest|next`) controls npm install channel.
+  - Git tag (`--tag`) labels repository release history.
+- Partial failure handling:
+  - If publish succeeds but tag push fails, no auto-unpublish is attempted.
+  - Follow `release-result.md` manual steps (including `git push origin <tag>`).
+- Manual workflow support: `.github/workflows/release-publish.yml` (`workflow_dispatch` + `workflow_call`, no cron).
+
 Note: The `lint`, `format:check`, and `build` scripts in `package.json` are placeholders. Replace them with your project's real tooling.
 
 ## Support and Updates
@@ -411,7 +434,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 Stage 0-9 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration + greenfield template + release hardening docs + release preflight automation). Stage 10 is active via AG-GOV-044/045/046.
+- AG-GOV-003 Stage 0-10 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration + greenfield template + release hardening docs + release preflight automation + release evidence artifacts). Stage 11 is active via AG-GOV-047/048/049.
 
 ## License
 

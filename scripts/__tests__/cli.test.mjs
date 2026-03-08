@@ -55,6 +55,7 @@ test('CLI help displays commands', () => {
   assert.match(result.stdout, /init/);
   assert.match(result.stdout, /ci-check/);
   assert.match(result.stdout, /release-check/);
+  assert.match(result.stdout, /release-publish/);
   assert.match(result.stdout, /doctor/);
   assert.match(result.stdout, /upgrade/);
   assert.match(result.stdout, /adopt/);
@@ -448,7 +449,7 @@ test('--apply and --report are rejected outside adopt mode', () => {
 
   const applyInvalid = run(['check', '--apply'], repo);
   assert.notEqual(applyInvalid.status, 0);
-  assert.match(applyInvalid.stderr, /--apply is only supported with --adopt/);
+  assert.match(applyInvalid.stderr, /--apply is only supported with --adopt or --release-publish/);
 
   const reportInvalid = run(['check', '--report', 'tmp.md'], repo);
   assert.notEqual(reportInvalid.status, 0);
@@ -648,12 +649,12 @@ test('release-check workflow uploads only report artifacts with 14-day retention
   assert.match(workflow, /retention-days:\s*14/);
 });
 
-test('stage 10 docs mention release-check report mode', () => {
+test('stage 11 docs mention release-check report mode', () => {
   const readme = readFileSync(path.join(process.cwd(), 'README.md'), 'utf8');
   const docsIndex = readFileSync(path.join(process.cwd(), 'docs', 'README.md'), 'utf8');
   const policy = readFileSync(path.join(process.cwd(), 'docs', 'development', 'release-maintenance-policy.md'), 'utf8');
 
   assert.match(readme, /release-check --scope all --report both --out-dir \.governance\/release-check/);
-  assert.match(docsIndex, /Installable Distribution \(AG-GOV-003 Stage 10\)/);
+  assert.match(docsIndex, /Installable Distribution \(AG-GOV-003 Stage 11\)/);
   assert.match(policy, /Preferred automation path \(Stage 10\)/);
 });
