@@ -1,0 +1,32 @@
+# Greenfield Governance Template
+
+This template is for net-new repositories.
+
+## Bootstrap
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Bootstrap governance artifacts and checks:
+
+```bash
+npm run governance:bootstrap
+```
+
+This runs:
+
+- `npm run governance:init`
+- `npm run governance:check`
+- `npm run governance:doctor`
+
+## Next Steps
+
+- Replace placeholder scripts (`format:check`, `lint`, `test`, `build`) with your project commands.
+- Start implementation on a compliant feature branch (for example `feat/your-scope`).
+
+## Scope Note
+
+For existing repositories, use the `adopt` migration path instead of this template.

@@ -1,0 +1,21 @@
+{
+  "name": "ai-governance-greenfield-template",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Greenfield starter template bootstrapped with AI Agent Governance",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "governance:init": "ai-governance init --preset node-npm-cjs --hook-strategy auto",
+    "governance:check": "ai-governance check",
+    "governance:doctor": "ai-governance doctor",
+    "governance:bootstrap": "npm run governance:init && npm run governance:check && npm run governance:doctor",
+    "format:check": "echo 'Format check placeholder: replace for your stack'",
+    "lint": "echo 'Lint placeholder: replace for your stack'",
+    "test": "echo 'Test placeholder: replace for your stack'",
+    "build": "echo 'Build placeholder: replace for your stack'"
+  },
+  "devDependencies": {
+    "@ramuks22/ai-agent-governance": "1.1.0"
+  }
+}
