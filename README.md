@@ -9,6 +9,7 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
 - ⚙️ Config-driven gates and tracker validation
 - 🔀 Merge-by-command protocol with auditability
 - 🔄 CI parity for local gates
+- 🧪 Release maintenance and distribution preflight checks
 
 ## 5-Minute Quickstart (Package-First)
 
@@ -30,6 +31,7 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
    ```bash
    npx @ramuks22/ai-agent-governance check
    npx @ramuks22/ai-agent-governance ci-check --gate all
+   npx @ramuks22/ai-agent-governance release-check --scope all
    npx @ramuks22/ai-agent-governance doctor
    ```
 
@@ -360,6 +362,7 @@ The included workflow:
 | `npm run governance:check` | Validate config, hooks, and tracker |
 | `npm run governance:doctor` | Detailed diagnostics for config, hooks, tracker, and manifest |
 | `npm run governance:ci-check` | Run configured gates in CI parity mode (`--gate all` by default) |
+| `npm run governance:release-check` | Run release maintenance + distribution dry-run preflight checks |
 | `npm run governance:init` | Create config and tracker from templates |
 | `npm run gate:precommit` | Run pre-commit gates manually |
 | `npm run gate:prepush` | Run pre-push gates manually |
@@ -370,6 +373,7 @@ CLI equivalent (package mode):
 - `npx @ramuks22/ai-agent-governance init --wizard`
 - `npx @ramuks22/ai-agent-governance check`
 - `npx @ramuks22/ai-agent-governance ci-check --gate all`
+- `npx @ramuks22/ai-agent-governance release-check --scope all`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
 - `npx @ramuks22/ai-agent-governance adopt`
@@ -405,7 +409,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 Stage 0-7 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration + greenfield template). Stage 8 is active via AG-GOV-036/037/038; Stage 9+ remains roadmap.
+- AG-GOV-003 Stage 0-8 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration + greenfield template + release hardening docs). Stage 9 is active via AG-GOV-041/042/043; Stage 10+ remains roadmap.
 
 ## License
 

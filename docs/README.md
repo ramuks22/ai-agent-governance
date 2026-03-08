@@ -2,7 +2,7 @@
 
 This folder contains the governance framework documentation.
 
-## Installable Distribution (AG-GOV-003 Stage 8)
+## Installable Distribution (AG-GOV-003 Stage 9)
 
 Package-first commands:
 
@@ -10,6 +10,7 @@ Package-first commands:
 - `npx @ramuks22/ai-agent-governance init --wizard`
 - `npx @ramuks22/ai-agent-governance check`
 - `npx @ramuks22/ai-agent-governance ci-check --gate all`
+- `npx @ramuks22/ai-agent-governance release-check --scope all`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
 - `npx @ramuks22/ai-agent-governance adopt`
@@ -45,6 +46,7 @@ Onboarding split:
 - `.github/pull_request_template.md` - PR checklist template
 - `.github/workflows/governance-ci.yml` - direct CI parity workflow
 - `.github/workflows/governance-ci-reusable.yml` - reusable GitHub workflow (`workflow_call`)
+- `.github/workflows/release-check.yml` - on-demand release preflight workflow (`workflow_dispatch` + `workflow_call`)
 
 ## Examples
 
@@ -56,3 +58,4 @@ Onboarding split:
 - `docs/requirements/AG-GOV-003-stage5/workshop.md` - shared workshop artifact for Stage 5 CI integration
 - `docs/requirements/AG-GOV-003-stage6/workshop.md` - shared workshop artifact for Stage 6 adopt migration flow
 - `docs/requirements/AG-GOV-003-stage7/workshop.md` - shared workshop artifact for Stage 7 greenfield template distribution
+- `docs/requirements/AG-GOV-003-stage9/workshop.md` - shared workshop artifact for Stage 9 maintenance automation and distribution preflight

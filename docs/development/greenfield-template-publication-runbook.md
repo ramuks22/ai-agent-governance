@@ -64,6 +64,8 @@ Create or update a dedicated template repository from `templates/greenfield`:
    - `npm install`
    - `npm run governance:bootstrap`
 4. Onboarding docs keep explicit greenfield vs existing split.
+5. Run distribution preflight before publication updates:
+   - `npx @ramuks22/ai-agent-governance release-check --scope distribution`
 
 ## Deterministic Validation Commands (AG-GOV-035)
 

@@ -49,6 +49,7 @@ test('CLI help displays commands', () => {
   assert.match(result.stdout, /ai-governance <command>/);
   assert.match(result.stdout, /init/);
   assert.match(result.stdout, /ci-check/);
+  assert.match(result.stdout, /release-check/);
   assert.match(result.stdout, /doctor/);
   assert.match(result.stdout, /upgrade/);
   assert.match(result.stdout, /adopt/);
@@ -149,6 +150,41 @@ test('--gate is rejected when command is not ci-check', () => {
   const result = run(['check', '--gate', 'all'], repo);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /--gate is only supported with --ci-check/);
+});
+
+test('release-check rejects invalid --scope values', () => {
+  const repo = setupRepo('gov-cli-release-check-invalid-scope');
+  const result = run(['release-check', '--scope', 'unknown'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid --scope value/);
+});
+
+test('--scope is rejected when command is not release-check', () => {
+  const repo = setupRepo('gov-cli-release-scope-non-release-check');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const result = run(['check', '--scope', 'all'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /--scope is only supported with --release-check/);
+});
+
+test('release-check maintenance fails when policy file is missing', () => {
+  const repo = setupRepo('gov-cli-release-check-missing-policy');
+  const result = run(['release-check', '--scope', 'maintenance'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /\[governance:release-check\] FAIL maintenance\.policy-file/);
+  assert.match(result.stdout, /release-maintenance-policy\.md/);
+});
+
+test('release-check passes maintenance and distribution scopes in this repository', () => {
+  const maintenance = run(['release-check', '--scope', 'maintenance'], process.cwd());
+  assert.equal(maintenance.status, 0, `${maintenance.stdout}\n${maintenance.stderr}`);
+  assert.match(maintenance.stdout, /\[governance:release-check\] PASS \(scope=maintenance\)/);
+
+  const distribution = run(['release-check', '--scope', 'distribution'], process.cwd());
+  assert.equal(distribution.status, 0, `${distribution.stdout}\n${distribution.stderr}`);
+  assert.match(distribution.stdout, /\[governance:release-check\] PASS \(scope=distribution\)/);
 });
 
 test('ci-check runs preCommit then prePush and fails fast on first failure', () => {

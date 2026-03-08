@@ -1,0 +1,54 @@
+name: Release Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      node_version:
+        description: Node version for release-check runtime
+        required: false
+        default: '20'
+        type: string
+      install_command:
+        description: Dependency install command for your package manager
+        required: false
+        default: 'npm ci'
+        type: string
+      check_scope:
+        description: release-check scope
+        required: false
+        default: 'all'
+        type: string
+  workflow_call:
+    inputs:
+      node_version:
+        description: Node version for release-check runtime
+        required: false
+        default: '20'
+        type: string
+      install_command:
+        description: Dependency install command for your package manager
+        required: false
+        default: 'npm ci'
+        type: string
+      check_scope:
+        description: release-check scope
+        required: false
+        default: 'all'
+        type: string
+
+jobs:
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: ${{ inputs.install_command }}
+
+      - name: Release Check
+        run: npx --no-install ai-governance release-check --scope ${{ inputs.check_scope }}
