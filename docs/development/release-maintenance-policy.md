@@ -87,10 +87,11 @@ npx ai-governance doctor
 
 ## Deterministic Validation Commands (AG-GOV-038)
 
-Preferred automation path (Stage 9):
+Preferred automation path (Stage 10):
 
 ```bash
 npx @ramuks22/ai-agent-governance release-check --scope all
+npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check
 ```
 
 Scope-specific runs:
@@ -98,7 +99,15 @@ Scope-specific runs:
 ```bash
 npx @ramuks22/ai-agent-governance release-check --scope maintenance
 npx @ramuks22/ai-agent-governance release-check --scope distribution
+npx @ramuks22/ai-agent-governance release-check --scope maintenance --report json --out-dir .governance/release-check
+npx @ramuks22/ai-agent-governance release-check --scope distribution --report md --out-dir .governance/release-check
 ```
+
+Stage 10 report contract:
+
+- Report schema version constant: `RELEASE_CHECK_REPORT_SCHEMA_VERSION`
+- Default behavior without `--report`: no report files written
+- Generated report files (when enabled): `.governance/release-check/report.json` and `.governance/release-check/report.md`
 
 Run from repository root:
 

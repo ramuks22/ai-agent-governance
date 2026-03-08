@@ -2,7 +2,7 @@
 
 This folder contains the governance framework documentation.
 
-## Installable Distribution (AG-GOV-003 Stage 9)
+## Installable Distribution (AG-GOV-003 Stage 10)
 
 Package-first commands:
 
@@ -11,6 +11,7 @@ Package-first commands:
 - `npx @ramuks22/ai-agent-governance check`
 - `npx @ramuks22/ai-agent-governance ci-check --gate all`
 - `npx @ramuks22/ai-agent-governance release-check --scope all`
+- `npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
 - `npx @ramuks22/ai-agent-governance adopt`
@@ -59,3 +60,4 @@ Onboarding split:
 - `docs/requirements/AG-GOV-003-stage6/workshop.md` - shared workshop artifact for Stage 6 adopt migration flow
 - `docs/requirements/AG-GOV-003-stage7/workshop.md` - shared workshop artifact for Stage 7 greenfield template distribution
 - `docs/requirements/AG-GOV-003-stage9/workshop.md` - shared workshop artifact for Stage 9 maintenance automation and distribution preflight
+- `docs/requirements/AG-GOV-003-stage10/workshop.md` - shared workshop artifact for Stage 10 release evidence artifacts

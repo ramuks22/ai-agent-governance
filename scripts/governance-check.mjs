@@ -6,6 +6,7 @@ import {
   mkdirSync,
   chmodSync,
   readdirSync,
+  renameSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import readline from 'node:readline/promises';
@@ -34,6 +35,8 @@ const MANIFEST_PATH = '.governance/manifest.json';
 const BACKUP_INDEX_PATH = '.governance/backups/index.json';
 const ADOPT_REPORT_PATH = '.governance/adopt-report.md';
 const ADOPT_PATCH_PATH = '.governance/patches/adopt.patch';
+const RELEASE_REPORT_DEFAULT_DIR = '.governance/release-check';
+const RELEASE_CHECK_REPORT_SCHEMA_VERSION = '1.0';
 const RELEASE_POLICY_PATH = 'docs/development/release-maintenance-policy.md';
 const STAGE0_DECISION_PATH = 'plans/ag-gov-003-stage0-decision-doc.md';
 const TEMPLATE_PACKAGE_PATH = 'templates/greenfield/package.json';
@@ -158,6 +161,84 @@ const ARTIFACT_FILES = [
   '.github/workflows/governance-ci-reusable.yml',
   EXAMPLE_CONFIG_PATH,
   SCHEMA_PATH,
+];
+
+const RELEASE_CHECK_METADATA = {
+  'maintenance.policy-file': {
+    title: 'Policy file exists',
+    severity: 'critical',
+    docsRef: RELEASE_POLICY_PATH,
+    remediation: `Restore ${RELEASE_POLICY_PATH} with canonical Stage 8/9 policy sections.`,
+  },
+  'maintenance.sections': {
+    title: 'Canonical policy sections present',
+    severity: 'major',
+    docsRef: RELEASE_POLICY_PATH,
+    remediation: 'Add missing canonical headings in release-maintenance-policy.',
+  },
+  'maintenance.pointer-consistency': {
+    title: 'Source-of-truth docs point to release policy',
+    severity: 'minor',
+    docsRef: RELEASE_POLICY_PATH,
+    remediation: 'Add policy pointer references in README/docs/delivery-governance/CONTRIBUTING.',
+  },
+  'maintenance.compatibility-alignment': {
+    title: 'Compatibility matrix aligns with package + Stage 0 baseline',
+    severity: 'critical',
+    docsRef: RELEASE_POLICY_PATH,
+    remediation: 'Align policy compatibility statements with package.json engines and Stage 0 decision doc.',
+  },
+  'maintenance.offline-guidance': {
+    title: 'Offline installation guidance present',
+    severity: 'major',
+    docsRef: RELEASE_POLICY_PATH,
+    remediation: 'Restore offline fallback installation commands in release-maintenance policy.',
+  },
+  'maintenance.deprecation-contract': {
+    title: 'Deprecation contract line present',
+    severity: 'minor',
+    docsRef: RELEASE_POLICY_PATH,
+    remediation: 'Restore Stage 8 deprecation process-only contract line in policy.',
+  },
+  'distribution.template-package': {
+    title: 'Template package metadata exists',
+    severity: 'critical',
+    docsRef: TEMPLATE_PACKAGE_PATH,
+    remediation: 'Restore templates/greenfield/package.json for distribution preflight checks.',
+  },
+  'distribution.template-pin': {
+    title: 'Template governance dependency pin matches repo version',
+    severity: 'critical',
+    docsRef: TEMPLATE_PACKAGE_PATH,
+    remediation: 'Pin template devDependency to the same version as repository package.json.',
+  },
+  'distribution.template-scripts': {
+    title: 'Template governance script contract is valid',
+    severity: 'major',
+    docsRef: TEMPLATE_PACKAGE_PATH,
+    remediation: 'Ensure governance:init/check/doctor/bootstrap scripts exist and bootstrap chains init/check/doctor.',
+  },
+  'distribution.no-floating-refs': {
+    title: 'Pinned distribution guidance avoids floating refs',
+    severity: 'major',
+    docsRef: 'docs/development/greenfield-template-publication-runbook.md',
+    remediation: 'Replace @main/@latest in pinned distribution docs/workflow references.',
+  },
+  'distribution.pack-dry-run': {
+    title: 'npm pack dry-run succeeds',
+    severity: 'major',
+    docsRef: 'package.json',
+    remediation: 'Fix package metadata/files so npm pack --dry-run succeeds locally.',
+  },
+};
+
+const SECRET_REDACTION_RULES = [
+  [/\bAKIA[0-9A-Z]{16}\b/g, 'AKIA[REDACTED]'],
+  [/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, 'gh_[REDACTED]'],
+  [/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, 'xox[REDACTED]'],
+  [/-----BEGIN(?: [^-]+)? PRIVATE KEY-----[\s\S]*?-----END(?: [^-]+)? PRIVATE KEY-----/g, '[REDACTED_PRIVATE_KEY]'],
+  [/\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED]'],
+  [/((?:token|secret|api[_-]?key|password)\s*[:=]\s*)(["']?)[^\s"']+\2/gi, '$1[REDACTED]'],
 ];
 
 function isHookPath(relPath) {
@@ -340,6 +421,36 @@ function ensureDir(filePath) {
   mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
+function writeFileAtomic(filePath, content) {
+  ensureDir(filePath);
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tempPath, content, 'utf8');
+  renameSync(tempPath, filePath);
+}
+
+function redactSensitiveText(value) {
+  if (typeof value !== 'string' || value.length === 0) return value;
+  let output = value;
+  for (const [pattern, replacement] of SECRET_REDACTION_RULES) {
+    output = output.replace(pattern, replacement);
+  }
+  return output;
+}
+
+function redactValue(value) {
+  if (typeof value === 'string') return redactSensitiveText(value);
+  if (Array.isArray(value)) return value.map((item) => redactValue(item));
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value).map(([key, item]) => [key, redactValue(item)]);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+function sortReleaseChecks(checks) {
+  return [...checks].sort((a, b) => a.id.localeCompare(b.id));
+}
+
 function normalizeForChecksum(content) {
   return content
     .replace(/\r\n/g, '\n')
@@ -381,6 +492,8 @@ function parseArgs(argv) {
   let scopeProvided = false;
   let applyProvided = false;
   let reportProvided = false;
+  let outDirProvided = false;
+  let reportValue = '';
   const options = {
     mode: 'check',
     skipHooks: isCI,
@@ -389,6 +502,8 @@ function parseArgs(argv) {
     apply: false,
     patch: false,
     reportPath: ADOPT_REPORT_PATH,
+    releaseReportFormat: null,
+    releaseOutDir: RELEASE_REPORT_DEFAULT_DIR,
     rollbackTo: null,
     preset: 'node-npm-cjs',
     presetProvided: false,
@@ -443,12 +558,19 @@ function parseArgs(argv) {
       options.hookStrategy = arg.split('=')[1];
       hookStrategyProvided = true;
     } else if (arg === '--report' && argv[i + 1]) {
-      options.reportPath = argv[i + 1];
+      reportValue = argv[i + 1];
       reportProvided = true;
       i += 1;
     } else if (arg.startsWith('--report=')) {
-      options.reportPath = arg.split('=')[1];
+      reportValue = arg.split('=')[1];
       reportProvided = true;
+    } else if (arg === '--out-dir' && argv[i + 1]) {
+      options.releaseOutDir = argv[i + 1];
+      outDirProvided = true;
+      i += 1;
+    } else if (arg.startsWith('--out-dir=')) {
+      options.releaseOutDir = arg.split('=')[1];
+      outDirProvided = true;
     } else if (arg === '--gate' && argv[i + 1]) {
       options.ciGate = argv[i + 1];
       gateProvided = true;
@@ -499,12 +621,33 @@ function parseArgs(argv) {
     fail('✖ --apply is only supported with --adopt.');
   }
 
-  if (options.mode !== 'adopt' && reportProvided) {
-    fail('✖ --report is only supported with --adopt.');
+  if (options.mode !== 'release-check' && outDirProvided) {
+    fail('✖ --out-dir is only supported with --release-check.');
+  }
+
+  if (options.mode !== 'adopt' && options.mode !== 'release-check' && reportProvided) {
+    fail('✖ --report is only supported with --adopt or --release-check.');
   }
 
   if (options.mode === 'adopt' && options.wizard) {
     fail('✖ --wizard is not supported with --adopt.');
+  }
+
+  if (options.mode === 'adopt' && reportProvided) {
+    if (!reportValue) fail('✖ --report requires a non-empty file path for --adopt.');
+    options.reportPath = reportValue;
+  }
+
+  if (options.mode === 'release-check') {
+    if (reportProvided) {
+      if (!['json', 'md', 'both'].includes(reportValue)) {
+        fail('✖ Invalid --report value for --release-check. Allowed: json, md, both');
+      }
+      options.releaseReportFormat = reportValue;
+    }
+    if (outDirProvided && !options.releaseReportFormat) {
+      fail('✖ --out-dir requires --report when used with --release-check.');
+    }
   }
 
   if (!['precommit', 'prepush', 'all'].includes(options.ciGate)) {
@@ -543,7 +686,8 @@ Options:
   --apply               Write managed changes during --adopt (default: report-only)
   --force               Overwrite conflicts or bypass rollback clean-tree check
   --patch[=<path>]      Write deterministic patch output during upgrade planning
-  --report <path>       Output report path for --adopt (default: .governance/adopt-report.md)
+  --report <value>      For --adopt: report path. For --release-check: json|md|both
+  --out-dir <path>      Output directory for --release-check report files
   --to <backup-id>      Backup ID for rollback target (default: latest)
   --gate <name>         Gate scope for --ci-check: precommit|prepush|all
   --scope <name>        Scope for --release-check: maintenance|distribution|all
@@ -554,7 +698,7 @@ Examples:
   node scripts/governance-check.mjs --init --preset node-npm-cjs --hook-strategy auto
   node scripts/governance-check.mjs --init --wizard --hook-strategy auto
   node scripts/governance-check.mjs --ci-check --gate all
-  node scripts/governance-check.mjs --release-check --scope all
+  node scripts/governance-check.mjs --release-check --scope all --report both --out-dir .governance/release-check
   node scripts/governance-check.mjs --upgrade --dry-run --patch
   node scripts/governance-check.mjs --adopt --report .governance/adopt-report.md
   node scripts/governance-check.mjs --adopt --apply --force --preset node-npm-cjs
@@ -1836,7 +1980,14 @@ function runCiCheck(options) {
 
 function evaluateReleaseMaintenanceChecks() {
   const checks = [];
-  const add = (name, ok, detail) => checks.push({ name, ok, detail });
+  const add = (id, ok, detail) => checks.push({
+    id,
+    ok,
+    detail,
+    scope: 'maintenance',
+    durationMs: 0,
+    evidence: [],
+  });
   const policyAbs = targetPath(RELEASE_POLICY_PATH);
 
   if (!existsSync(policyAbs)) {
@@ -1930,7 +2081,14 @@ function evaluateReleaseMaintenanceChecks() {
 
 function evaluateReleaseDistributionChecks() {
   const checks = [];
-  const add = (name, ok, detail) => checks.push({ name, ok, detail });
+  const add = (id, ok, detail) => checks.push({
+    id,
+    ok,
+    detail,
+    scope: 'distribution',
+    durationMs: 0,
+    evidence: [],
+  });
   const rootPackage = loadJson(targetPath('package.json'), 'package metadata');
   const templatePackageAbs = targetPath(TEMPLATE_PACKAGE_PATH);
 
@@ -2002,11 +2160,147 @@ function evaluateReleaseDistributionChecks() {
   return checks;
 }
 
+function releaseCheckMeta(check) {
+  const fallbackScope = typeof check.id === 'string' && check.id.includes('.')
+    ? check.id.split('.')[0]
+    : 'maintenance';
+  const metadata = RELEASE_CHECK_METADATA[check.id] || {};
+  return {
+    title: metadata.title || check.id,
+    severity: metadata.severity || 'major',
+    docsRef: metadata.docsRef || RELEASE_POLICY_PATH,
+    remediation: metadata.remediation || 'Review release-check output and align repository policy/docs/contracts.',
+    scope: check.scope || metadata.scope || fallbackScope,
+  };
+}
+
+function buildReleaseCheckCommand(options) {
+  const parts = ['release-check', `--scope ${options.releaseScope}`];
+  if (options.releaseReportFormat) {
+    parts.push(`--report ${options.releaseReportFormat}`);
+    parts.push(`--out-dir ${options.releaseOutDir}`);
+  }
+  return `npx @ramuks22/ai-agent-governance ${parts.join(' ')}`;
+}
+
+function formatReleaseCheckMarkdown(report) {
+  const lines = [
+    '# Release Check Report',
+    '',
+    `- Schema Version: \`${report.schemaVersion}\``,
+    `- Generated At (UTC): \`${report.generatedAtUtc}\``,
+    `- Tool Version: \`${report.toolVersion}\``,
+    `- Command: \`${report.command}\``,
+    `- Scope: \`${report.scope}\``,
+    `- Result: \`${report.result}\``,
+    `- Summary: total=${report.summary.total}, passed=${report.summary.passed}, failed=${report.summary.failed}`,
+    '',
+    '## Checks',
+  ];
+
+  for (const check of report.checks) {
+    lines.push('');
+    lines.push(`### ${check.status} ${check.id}`);
+    lines.push(`- Title: ${check.title}`);
+    lines.push(`- Scope: ${check.scope}`);
+    lines.push(`- Severity: ${check.severity}`);
+    lines.push(`- Message: ${check.message}`);
+    lines.push(`- Remediation: ${check.remediation}`);
+    lines.push(`- Docs Ref: \`${check.docsRef}\``);
+    lines.push(`- Duration Ms: ${check.durationMs}`);
+    if (check.evidence.length > 0) {
+      lines.push('- Evidence:');
+      for (const entry of check.evidence) {
+        lines.push(`  - ${entry}`);
+      }
+    }
+  }
+
+  if (Array.isArray(report.errors) && report.errors.length > 0) {
+    lines.push('');
+    lines.push('## Errors');
+    for (const err of report.errors) {
+      lines.push(`- ${err}`);
+    }
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+function buildReleaseCheckReport(checks, options, runtimeErrors = []) {
+  const sorted = sortReleaseChecks(checks);
+  const renderedChecks = sorted.map((check) => {
+    const meta = releaseCheckMeta(check);
+    const evidence = Array.isArray(check.evidence)
+      ? [...check.evidence].sort((a, b) => a.localeCompare(b))
+      : [];
+    return {
+      id: check.id,
+      title: meta.title,
+      scope: meta.scope,
+      status: check.ok ? 'PASS' : 'FAIL',
+      severity: meta.severity,
+      message: check.detail,
+      remediation: meta.remediation,
+      docsRef: meta.docsRef,
+      evidence,
+      durationMs: Number.isFinite(check.durationMs) ? check.durationMs : 0,
+    };
+  });
+
+  const passed = renderedChecks.filter((check) => check.status === 'PASS').length;
+  const failed = renderedChecks.length - passed;
+  const result = failed > 0 ? 'FAIL' : 'PASS';
+  const payload = {
+    schemaVersion: RELEASE_CHECK_REPORT_SCHEMA_VERSION,
+    generatedAtUtc: new Date().toISOString(),
+    toolVersion: packageVersion(),
+    command: buildReleaseCheckCommand(options),
+    scope: options.releaseScope,
+    result,
+    summary: {
+      total: renderedChecks.length,
+      passed,
+      failed,
+    },
+    checks: renderedChecks,
+  };
+
+  if (runtimeErrors.length > 0) {
+    payload.errors = runtimeErrors;
+  }
+
+  const redactedPayload = redactValue(payload);
+  return {
+    json: `${JSON.stringify(redactedPayload, null, 2)}\n`,
+    markdown: formatReleaseCheckMarkdown(redactedPayload),
+  };
+}
+
+function writeReleaseCheckReports(reportPayload, options) {
+  if (!options.releaseReportFormat) return;
+  const outDir = options.releaseOutDir || RELEASE_REPORT_DEFAULT_DIR;
+  const outRoot = targetPath(outDir);
+  mkdirSync(outRoot, { recursive: true });
+
+  if (options.releaseReportFormat === 'json' || options.releaseReportFormat === 'both') {
+    const jsonPath = path.join(outRoot, 'report.json');
+    writeFileAtomic(jsonPath, reportPayload.json);
+    info(`[governance:release-check] Wrote report: ${path.posix.join(outDir, 'report.json')}`);
+  }
+
+  if (options.releaseReportFormat === 'md' || options.releaseReportFormat === 'both') {
+    const mdPath = path.join(outRoot, 'report.md');
+    writeFileAtomic(mdPath, reportPayload.markdown);
+    info(`[governance:release-check] Wrote report: ${path.posix.join(outDir, 'report.md')}`);
+  }
+}
+
 function runReleaseCheck(options) {
   const selectedScopes = options.releaseScope === 'all'
     ? ['maintenance', 'distribution']
     : [options.releaseScope];
-  const checks = [];
+  let checks = [];
   for (const scope of selectedScopes) {
     if (scope === 'maintenance') {
       checks.push(...evaluateReleaseMaintenanceChecks());
@@ -2014,12 +2308,23 @@ function runReleaseCheck(options) {
       checks.push(...evaluateReleaseDistributionChecks());
     }
   }
+  checks = sortReleaseChecks(checks);
 
   let hasFailure = false;
   for (const check of checks) {
     const status = check.ok ? 'PASS' : 'FAIL';
-    info(`[governance:release-check] ${status} ${check.name}: ${check.detail}`);
+    info(`[governance:release-check] ${status} ${check.id}: ${redactSensitiveText(check.detail)}`);
     if (!check.ok) hasFailure = true;
+  }
+
+  if (options.releaseReportFormat) {
+    try {
+      const reportPayload = buildReleaseCheckReport(checks, options);
+      writeReleaseCheckReports(reportPayload, options);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      fail(`✖ Failed to write release-check report artifacts: ${message}`);
+    }
   }
 
   if (hasFailure) {
@@ -2287,4 +2592,18 @@ async function main() {
   runCheck(options);
 }
 
-await main();
+const isDirectExecution = (() => {
+  const invoked = process.argv[1];
+  if (!invoked) return false;
+  return path.resolve(invoked) === fileURLToPath(import.meta.url);
+})();
+
+if (isDirectExecution) {
+  await main();
+}
+
+export {
+  RELEASE_CHECK_REPORT_SCHEMA_VERSION,
+  redactSensitiveText,
+  buildReleaseCheckReport,
+};
