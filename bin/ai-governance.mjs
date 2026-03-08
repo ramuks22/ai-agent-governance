@@ -26,7 +26,7 @@ Examples:
   npx @ramuks22/ai-agent-governance init --wizard --hook-strategy auto
   npx @ramuks22/ai-agent-governance check
   npx @ramuks22/ai-agent-governance ci-check --gate all
-  npx @ramuks22/ai-agent-governance release-check --scope all
+  npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check
   npx @ramuks22/ai-agent-governance doctor
   npx @ramuks22/ai-agent-governance upgrade --dry-run
   npx @ramuks22/ai-agent-governance adopt --report .governance/adopt-report.md

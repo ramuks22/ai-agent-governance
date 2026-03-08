@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import {
+  RELEASE_CHECK_REPORT_SCHEMA_VERSION,
+  buildReleaseCheckReport,
+  redactSensitiveText,
+} from '../governance-check.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const binPath = path.resolve(__dirname, '..', '..', 'bin', 'ai-governance.mjs');
@@ -159,6 +164,13 @@ test('release-check rejects invalid --scope values', () => {
   assert.match(result.stderr, /Invalid --scope value/);
 });
 
+test('release-check rejects invalid --report values', () => {
+  const repo = setupRepo('gov-cli-release-check-invalid-report');
+  const result = run(['release-check', '--scope', 'maintenance', '--report', 'text'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Invalid --report value/);
+});
+
 test('--scope is rejected when command is not release-check', () => {
   const repo = setupRepo('gov-cli-release-scope-non-release-check');
   const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
@@ -167,6 +179,50 @@ test('--scope is rejected when command is not release-check', () => {
   const result = run(['check', '--scope', 'all'], repo);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /--scope is only supported with --release-check/);
+});
+
+test('--out-dir is rejected when command is not release-check', () => {
+  const repo = setupRepo('gov-cli-release-out-dir-non-release-check');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const result = run(['check', '--out-dir', '.governance/release-check'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /--out-dir is only supported with --release-check/);
+});
+
+test('release-check requires --report when --out-dir is provided', () => {
+  const repo = setupRepo('gov-cli-release-out-dir-requires-report');
+  const result = run(['release-check', '--scope', 'maintenance', '--out-dir', '.governance/release-check'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /--out-dir requires --report/);
+});
+
+test('release-check without --report writes no artifacts', () => {
+  const repo = setupRepo('gov-cli-release-no-report-artifacts');
+  const result = run(['release-check', '--scope', 'maintenance'], repo);
+  assert.notEqual(result.status, 0);
+  assert.equal(existsSync(path.join(repo, '.governance', 'release-check', 'report.json')), false);
+  assert.equal(existsSync(path.join(repo, '.governance', 'release-check', 'report.md')), false);
+});
+
+test('release-check with --report writes artifacts even on failure', () => {
+  const repo = setupRepo('gov-cli-release-report-fail');
+  const outDir = '.governance/release-check';
+  const result = run(['release-check', '--scope', 'maintenance', '--report', 'both', '--out-dir', outDir], repo);
+  assert.notEqual(result.status, 0);
+
+  const jsonPath = path.join(repo, outDir, 'report.json');
+  const mdPath = path.join(repo, outDir, 'report.md');
+  assert.equal(existsSync(jsonPath), true);
+  assert.equal(existsSync(mdPath), true);
+
+  const payload = JSON.parse(readFileSync(jsonPath, 'utf8'));
+  assert.equal(payload.schemaVersion, RELEASE_CHECK_REPORT_SCHEMA_VERSION);
+  assert.equal(payload.result, 'FAIL');
+  assert.equal(payload.scope, 'maintenance');
+  assert.equal(payload.summary.total >= 1, true);
+  assert.equal(payload.summary.failed >= 1, true);
 });
 
 test('release-check maintenance fails when policy file is missing', () => {
@@ -396,7 +452,7 @@ test('--apply and --report are rejected outside adopt mode', () => {
 
   const reportInvalid = run(['check', '--report', 'tmp.md'], repo);
   assert.notEqual(reportInvalid.status, 0);
-  assert.match(reportInvalid.stderr, /--report is only supported with --adopt/);
+  assert.match(reportInvalid.stderr, /--report is only supported with --adopt or --release-check/);
 });
 
 test('upgrade dry-run can emit deterministic patch output', () => {
@@ -516,4 +572,88 @@ test('doctor ci-parity recognizes governance-ci-reusable workflow references', (
   assert.notEqual(doctor.status, 0);
   assert.match(doctor.stdout, /\[doctor\] PASS ci-parity/);
   assert.match(doctor.stdout, /caller\.yml/);
+});
+
+test('release-check report builder sorts checks and emits deterministic schema fields', () => {
+  const checks = [
+    {
+      id: 'distribution.template-pin',
+      ok: false,
+      detail: 'template pin mismatch',
+      scope: 'distribution',
+      durationMs: 0,
+      evidence: ['z', 'a'],
+    },
+    {
+      id: 'maintenance.sections',
+      ok: true,
+      detail: 'canonical sections present',
+      scope: 'maintenance',
+      durationMs: 0,
+      evidence: ['b'],
+    },
+  ];
+
+  const report = buildReleaseCheckReport(checks, {
+    releaseScope: 'all',
+    releaseReportFormat: 'both',
+    releaseOutDir: '.governance/release-check',
+  });
+  const payload = JSON.parse(report.json);
+  assert.equal(payload.schemaVersion, RELEASE_CHECK_REPORT_SCHEMA_VERSION);
+  assert.deepEqual(payload.checks.map((check) => check.id), [
+    'distribution.template-pin',
+    'maintenance.sections',
+  ]);
+});
+
+test('redaction masks secret-like values in release-check reports', () => {
+  const awsKey = ['AKIA', '1234567890ABCDEF'].join('');
+  const ghToken = ['gh', 'p_', 'abcdefghijklmnopqrstuvwxyz123456'].join('');
+  const slackToken = ['xox', 'b-', '1234567890-abcdefghijklmnop'].join('');
+  const privateKey = `-----${['BEGIN', 'PRIVATE', 'KEY-----'].join(' ')}\\nABCDEF\\n-----${['END', 'PRIVATE', 'KEY-----'].join(' ')}`;
+  const raw = `Bearer abc.def token=${ghToken} secret=top api_key=foo password=bar ${awsKey} ${slackToken} ${privateKey}`;
+  const redacted = redactSensitiveText(raw);
+  assert.doesNotMatch(redacted, new RegExp(awsKey));
+  assert.doesNotMatch(redacted, new RegExp(ghToken));
+  assert.doesNotMatch(redacted, new RegExp(slackToken));
+  assert.doesNotMatch(redacted, /BEGIN PRIVATE KEY/);
+  assert.match(redacted, /\[REDACTED\]/);
+
+  const report = buildReleaseCheckReport([
+    {
+      id: 'distribution.pack-dry-run',
+      ok: false,
+      detail: raw,
+      scope: 'distribution',
+      durationMs: 0,
+      evidence: [raw],
+    },
+  ], {
+    releaseScope: 'distribution',
+    releaseReportFormat: 'both',
+    releaseOutDir: '.governance/release-check',
+  });
+  assert.doesNotMatch(report.json, new RegExp(ghToken));
+  assert.doesNotMatch(report.markdown, new RegExp(slackToken));
+  assert.match(report.json, /\[REDACTED\]/);
+  assert.match(report.markdown, /\[REDACTED\]/);
+});
+
+test('release-check workflow uploads only report artifacts with 14-day retention', () => {
+  const workflow = readFileSync(path.join(process.cwd(), '.github', 'workflows', 'release-check.yml'), 'utf8');
+  assert.match(workflow, /release-check --scope .* --report both --out-dir \.governance\/release-check/);
+  assert.match(workflow, /\.governance\/release-check\/report\.json/);
+  assert.match(workflow, /\.governance\/release-check\/report\.md/);
+  assert.match(workflow, /retention-days:\s*14/);
+});
+
+test('stage 10 docs mention release-check report mode', () => {
+  const readme = readFileSync(path.join(process.cwd(), 'README.md'), 'utf8');
+  const docsIndex = readFileSync(path.join(process.cwd(), 'docs', 'README.md'), 'utf8');
+  const policy = readFileSync(path.join(process.cwd(), 'docs', 'development', 'release-maintenance-policy.md'), 'utf8');
+
+  assert.match(readme, /release-check --scope all --report both --out-dir \.governance\/release-check/);
+  assert.match(docsIndex, /Installable Distribution \(AG-GOV-003 Stage 10\)/);
+  assert.match(policy, /Preferred automation path \(Stage 10\)/);
 });

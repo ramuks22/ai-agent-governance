@@ -51,4 +51,15 @@ jobs:
         run: ${{ inputs.install_command }}
 
       - name: Release Check
-        run: npx --no-install ai-governance release-check --scope ${{ inputs.check_scope }}
+        run: npx --no-install ai-governance release-check --scope ${{ inputs.check_scope }} --report both --out-dir .governance/release-check
+
+      - name: Upload release-check reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-check-report
+          path: |
+            .governance/release-check/report.json
+            .governance/release-check/report.md
+          if-no-files-found: warn
+          retention-days: 14

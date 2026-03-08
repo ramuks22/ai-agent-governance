@@ -32,6 +32,7 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
    npx @ramuks22/ai-agent-governance check
    npx @ramuks22/ai-agent-governance ci-check --gate all
    npx @ramuks22/ai-agent-governance release-check --scope all
+   npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check
    npx @ramuks22/ai-agent-governance doctor
    ```
 
@@ -374,6 +375,7 @@ CLI equivalent (package mode):
 - `npx @ramuks22/ai-agent-governance check`
 - `npx @ramuks22/ai-agent-governance ci-check --gate all`
 - `npx @ramuks22/ai-agent-governance release-check --scope all`
+- `npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check`
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
 - `npx @ramuks22/ai-agent-governance adopt`
@@ -409,7 +411,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 Stage 0-8 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration + greenfield template + release hardening docs). Stage 9 is active via AG-GOV-041/042/043; Stage 10+ remains roadmap.
+- AG-GOV-003 Stage 0-9 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration + greenfield template + release hardening docs + release preflight automation). Stage 10 is active via AG-GOV-044/045/046.
 
 ## License
 
