@@ -39,6 +39,7 @@ Decision rules:
 - Add this line to the PR body:
   - `Applicability: Required|Not Required — Reason: <one line>`
 - The tracker evidence column must reference the PR containing this line.
+- For copy-ready examples, see `docs/examples/AG-GOV-009-workshop-adoption-examples.md`.
 
 ### Supporting Category Examples (Secondary Guidance)
 
