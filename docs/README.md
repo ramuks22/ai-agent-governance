@@ -2,7 +2,7 @@
 
 This folder contains the governance framework documentation.
 
-## Installable Distribution (AG-GOV-003 Stage 7)
+## Installable Distribution (AG-GOV-003 Stage 8)
 
 Package-first commands:
 
@@ -26,6 +26,7 @@ Onboarding split:
 ## Source of Truth
 
 - `docs/development/delivery-governance.md` - delivery rules and quality gates
+- `docs/development/release-maintenance-policy.md` - canonical release/maintenance contract (support SLA, compatibility matrix, offline install, deprecation workflow)
 - `docs/development/greenfield-template-publication-runbook.md` - manual publication process for GitHub Template distribution (operational guidance)
 - `.agent/workflows/governance.md` - workflow rules and stop conditions
 - `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)` - canonical governance terminology

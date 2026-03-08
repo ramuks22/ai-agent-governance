@@ -10,6 +10,7 @@ This document defines delivery rules, source of truth, and local quality gates.
 - Terminology contract (canonical): `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)`
 - Branch protection contract (canonical): `.agent/workflows/governance.md` -> `Required Branch Protection for main`
 - Owner merge exception policy (if active): `.agent/workflows/governance.md` -> `Required Branch Protection for main` -> `Approved exception policy (timeboxed)`
+- Release/maintenance policy (canonical): `docs/development/release-maintenance-policy.md`
 
 ## Tracking Rules
 

@@ -14,11 +14,14 @@ Thanks for contributing to the AI Agent Governance Framework.
 
 ```bash
 npm install
-node scripts/governance-check.mjs --init
-node scripts/install-githooks.mjs
-git config core.hooksPath .githooks
 npm run governance:check
+npm run governance:ci-check
+npm run governance:doctor
 ```
+
+Canonical release/maintenance policy and compatibility guidance:
+
+- `docs/development/release-maintenance-policy.md`
 
 ## PRs
 
