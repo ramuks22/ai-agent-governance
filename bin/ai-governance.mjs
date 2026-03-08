@@ -16,6 +16,7 @@ Commands:
   ci-check  Run configured governance gates for CI parity
   doctor    Print detailed governance diagnostics
   upgrade   Upgrade managed governance artifacts safely
+  adopt     Analyze/adopt existing repos into managed governance artifacts
   rollback  Restore governance artifacts from backup
   help      Show this help message
 
@@ -26,6 +27,7 @@ Examples:
   npx @ramuks22/ai-agent-governance ci-check --gate all
   npx @ramuks22/ai-agent-governance doctor
   npx @ramuks22/ai-agent-governance upgrade --dry-run
+  npx @ramuks22/ai-agent-governance adopt --report .governance/adopt-report.md
   npx @ramuks22/ai-agent-governance rollback --to latest --force
 `);
 }
@@ -51,6 +53,7 @@ if (command === 'check') runCheckScript(rest);
 if (command === 'ci-check') runCheckScript(['--ci-check', ...rest]);
 if (command === 'doctor') runCheckScript(['--doctor', ...rest]);
 if (command === 'upgrade') runCheckScript(['--upgrade', ...rest]);
+if (command === 'adopt') runCheckScript(['--adopt', ...rest]);
 if (command === 'rollback') runCheckScript(['--rollback', ...rest]);
 
 console.error(`Unknown command: ${command}`);

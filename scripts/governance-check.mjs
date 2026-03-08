@@ -32,6 +32,8 @@ const TRACKER_TEMPLATE_PATH = 'docs/templates/tracker-template.md';
 const TRACKER_PATH = 'docs/tracker.md';
 const MANIFEST_PATH = '.governance/manifest.json';
 const BACKUP_INDEX_PATH = '.governance/backups/index.json';
+const ADOPT_REPORT_PATH = '.governance/adopt-report.md';
+const ADOPT_PATCH_PATH = '.governance/patches/adopt.patch';
 
 const PRESETS = {
   'node-npm-cjs': {
@@ -264,6 +266,11 @@ function fail(message) {
   process.exit(1);
 }
 
+function failBlocked(message) {
+  process.stderr.write(`${message}\n`);
+  process.exit(2);
+}
+
 function warn(message) {
   process.stderr.write(`⚠ ${message}\n`);
 }
@@ -366,17 +373,24 @@ function isGitRepo() {
 function parseArgs(argv) {
   const isCI = process.env.CI === 'true';
   let presetProvided = false;
+  let hookStrategyProvided = false;
   let gateProvided = false;
+  let applyProvided = false;
+  let reportProvided = false;
   const options = {
     mode: 'check',
     skipHooks: isCI,
     dryRun: false,
     force: false,
+    apply: false,
     patch: false,
+    reportPath: ADOPT_REPORT_PATH,
     rollbackTo: null,
     preset: 'node-npm-cjs',
+    presetProvided: false,
     wizard: false,
     hookStrategy: 'auto',
+    hookStrategyProvided: false,
     configPath: process.env.GOVERNANCE_CONFIG || CONFIG_PATH,
     ciGate: 'all',
   };
@@ -387,9 +401,14 @@ function parseArgs(argv) {
     else if (arg === '--doctor') options.mode = 'doctor';
     else if (arg === '--ci-check') options.mode = 'ci-check';
     else if (arg === '--upgrade') options.mode = 'upgrade';
+    else if (arg === '--adopt') options.mode = 'adopt';
     else if (arg === '--rollback') options.mode = 'rollback';
     else if (arg === '--skip-hooks') options.skipHooks = true;
     else if (arg === '--dry-run') options.dryRun = true;
+    else if (arg === '--apply') {
+      options.apply = true;
+      applyProvided = true;
+    }
     else if (arg === '--force') options.force = true;
     else if (arg === '--patch') options.patch = true;
     else if (arg.startsWith('--patch=')) {
@@ -412,9 +431,18 @@ function parseArgs(argv) {
       presetProvided = true;
     } else if (arg === '--hook-strategy' && argv[i + 1]) {
       options.hookStrategy = argv[i + 1];
+      hookStrategyProvided = true;
       i += 1;
     } else if (arg.startsWith('--hook-strategy=')) {
       options.hookStrategy = arg.split('=')[1];
+      hookStrategyProvided = true;
+    } else if (arg === '--report' && argv[i + 1]) {
+      options.reportPath = argv[i + 1];
+      reportProvided = true;
+      i += 1;
+    } else if (arg.startsWith('--report=')) {
+      options.reportPath = arg.split('=')[1];
+      reportProvided = true;
     } else if (arg === '--gate' && argv[i + 1]) {
       options.ciGate = argv[i + 1];
       gateProvided = true;
@@ -431,6 +459,9 @@ function parseArgs(argv) {
     return options;
   }
 
+  options.presetProvided = presetProvided;
+  options.hookStrategyProvided = hookStrategyProvided;
+
   if (!PRESETS[options.preset]) {
     fail(`✖ Invalid preset '${options.preset}'. Allowed: ${PRESET_NAMES.join(', ')}`);
   }
@@ -445,6 +476,18 @@ function parseArgs(argv) {
 
   if (options.mode !== 'ci-check' && gateProvided) {
     fail('✖ --gate is only supported with --ci-check.');
+  }
+
+  if (options.mode !== 'adopt' && applyProvided) {
+    fail('✖ --apply is only supported with --adopt.');
+  }
+
+  if (options.mode !== 'adopt' && reportProvided) {
+    fail('✖ --report is only supported with --adopt.');
+  }
+
+  if (options.mode === 'adopt' && options.wizard) {
+    fail('✖ --wizard is not supported with --adopt.');
   }
 
   if (!['precommit', 'prepush', 'all'].includes(options.ciGate)) {
@@ -467,6 +510,7 @@ Modes:
   --ci-check            Run configured governance gates for CI parity
   --doctor              Show detailed diagnostics
   --upgrade             Upgrade managed governance artifacts
+  --adopt               Analyze/adopt existing repositories into managed governance artifacts
   --rollback            Restore artifacts from backup snapshot
 
 Options:
@@ -474,8 +518,10 @@ Options:
   --wizard              Interactive preset selection for init (mutually exclusive with --preset)
   --hook-strategy <s>   Hook install strategy: auto|core-hooks|git-hooks
   --dry-run             Print planned actions without writing files
+  --apply               Write managed changes during --adopt (default: report-only)
   --force               Overwrite conflicts or bypass rollback clean-tree check
   --patch[=<path>]      Write deterministic patch output during upgrade planning
+  --report <path>       Output report path for --adopt (default: .governance/adopt-report.md)
   --to <backup-id>      Backup ID for rollback target (default: latest)
   --gate <name>         Gate scope for --ci-check: precommit|prepush|all
   --skip-hooks          Skip hook validation (also auto-skipped when CI=true)
@@ -486,6 +532,8 @@ Examples:
   node scripts/governance-check.mjs --init --wizard --hook-strategy auto
   node scripts/governance-check.mjs --ci-check --gate all
   node scripts/governance-check.mjs --upgrade --dry-run --patch
+  node scripts/governance-check.mjs --adopt --report .governance/adopt-report.md
+  node scripts/governance-check.mjs --adopt --apply --force --preset node-npm-cjs
   node scripts/governance-check.mjs --rollback --to latest --force
   node scripts/governance-check.mjs --doctor
 `);
@@ -579,6 +627,88 @@ function detectHookManagers() {
     hasHusky,
     hasLefthook,
     hasConflict: hasHusky || hasLefthook,
+  };
+}
+
+function detectAdoptRepoProfile() {
+  const packageJson = tryLoadJson(targetPath('package.json'));
+  const packageManagerField = String(packageJson?.packageManager || '').toLowerCase();
+  const hasPnpmWorkspace = existsSync(targetPath('pnpm-workspace.yaml'));
+  const hasPnpmLock = existsSync(targetPath('pnpm-lock.yaml'));
+  const hasYarnLock = existsSync(targetPath('yarn.lock'));
+  const hasNpmLock = existsSync(targetPath('package-lock.json'));
+  const hasWorkspaces = Array.isArray(packageJson?.workspaces) || typeof packageJson?.workspaces === 'object' || hasPnpmWorkspace;
+
+  const layout = hasWorkspaces ? 'monorepo/workspaces' : 'single-package';
+  const moduleType = packageJson?.type === 'module' ? 'esm' : 'cjs';
+
+  let packageManager = 'npm';
+  if (packageManagerField.startsWith('pnpm@') || hasPnpmWorkspace || hasPnpmLock) {
+    packageManager = 'pnpm';
+  } else if (packageManagerField.startsWith('yarn@') || hasYarnLock) {
+    packageManager = 'yarn';
+  } else if (packageManagerField.startsWith('npm@') || hasNpmLock) {
+    packageManager = 'npm';
+  }
+
+  let inferredPreset = null;
+  const blockers = [];
+  if (packageManager === 'npm' && layout === 'single-package') {
+    inferredPreset = moduleType === 'esm' ? 'node-npm-esm' : 'node-npm-cjs';
+  } else if (packageManager === 'pnpm' && layout === 'monorepo/workspaces') {
+    inferredPreset = 'node-pnpm-monorepo';
+  } else if (packageManager === 'yarn' && layout === 'monorepo/workspaces') {
+    inferredPreset = 'node-yarn-workspaces';
+  } else {
+    blockers.push(
+      `Unsupported inferred stack (${packageManager} + ${layout}). ` +
+      'Pass --preset explicitly (for example --preset generic) to continue.'
+    );
+  }
+
+  return {
+    packageManager,
+    layout,
+    moduleType,
+    inferredPreset,
+    inferredHookStrategy: 'auto',
+    blockers,
+    hasManifest: existsSync(targetPath(MANIFEST_PATH)),
+    hasGovernanceConfig: existsSync(targetPath(CONFIG_PATH)),
+    hasTracker: existsSync(targetPath(TRACKER_PATH)),
+  };
+}
+
+function resolveAdoptRuntimeOptions(options, manifest, profile) {
+  const presetSource = options.presetProvided
+    ? 'cli'
+    : (manifest?.preset ? 'manifest' : 'inference');
+  const hookStrategySource = options.hookStrategyProvided
+    ? 'cli'
+    : (manifest?.hookStrategy ? 'manifest' : 'inference');
+
+  const preset = options.presetProvided
+    ? options.preset
+    : (manifest?.preset || profile.inferredPreset || 'generic');
+  const hookStrategy = options.hookStrategyProvided
+    ? options.hookStrategy
+    : (manifest?.hookStrategy || profile.inferredHookStrategy);
+  const blockers = presetSource === 'inference' ? [...profile.blockers] : [];
+
+  if (!PRESETS[preset]) {
+    blockers.push(`Resolved preset '${preset}' is not supported.`);
+  }
+  if (!['auto', 'core-hooks', 'git-hooks'].includes(hookStrategy)) {
+    blockers.push(`Resolved hook strategy '${hookStrategy}' is not supported.`);
+  }
+
+  return {
+    ...options,
+    preset,
+    hookStrategy,
+    presetSource,
+    hookStrategySource,
+    blockers,
   };
 }
 
@@ -879,6 +1009,57 @@ function fileStatusForEntry(entry, manifest, modeLabel = 'init') {
   };
 }
 
+function fileStatusForAdoptEntry(entry, manifest) {
+  if (manifest) {
+    return fileStatusForEntry(entry, manifest, 'adopt');
+  }
+
+  const abs = targetPath(entry.relPath);
+  const exists = existsSync(abs);
+  const currentContent = exists ? readFileSync(abs, 'utf8') : null;
+  const plannedContent = entry.strategy === 'managed-block'
+    ? renderManagedContent(entry.relPath, entry.content, currentContent)
+    : entry.content;
+  const expectedChecksum = checksumText(plannedContent);
+
+  if (entry.createOnly && exists) {
+    return {
+      action: 'keep-existing',
+      expectedChecksum,
+      currentChecksum: checksumText(currentContent),
+      reason: 'create-only file already exists',
+      plannedContent,
+    };
+  }
+
+  if (!exists) {
+    return {
+      action: 'create',
+      expectedChecksum,
+      plannedContent,
+    };
+  }
+
+  const currentChecksum = checksumText(currentContent);
+  if (currentChecksum === expectedChecksum) {
+    return {
+      action: 'adopt-existing',
+      expectedChecksum,
+      currentChecksum,
+      reason: 'existing file matches governance-managed target',
+      plannedContent,
+    };
+  }
+
+  return {
+    action: 'conflict',
+    expectedChecksum,
+    currentChecksum,
+    reason: 'existing unmanaged file differs from governance-managed target',
+    plannedContent,
+  };
+}
+
 function writeManagedFile(relPath, content) {
   const abs = targetPath(relPath);
   ensureDir(abs);
@@ -967,7 +1148,6 @@ function writeBackupIndex(index) {
 function createBackupSnapshot(manifest, toVersion, filePaths) {
   const uniquePaths = [...new Set(filePaths)].sort();
   const existing = uniquePaths.filter((relPath) => existsSync(targetPath(relPath)));
-  if (!existing.length) return null;
 
   const id = new Date().toISOString().replace(/[:.]/g, '-');
   const snapshotRoot = path.posix.join('.governance', 'backups', id, 'files');
@@ -1000,10 +1180,10 @@ function resolvePatchPath(options, manifest, toVersion) {
   return path.posix.join('.governance', 'patches', `upgrade-${from}-to-${to}.patch`);
 }
 
-function writeUpgradePatch(patchPath, actions, fromVersion, toVersion) {
+function writeActionPatch(patchPath, modeLabel, actions, fromVersion, toVersion) {
   const sorted = [...actions].sort((a, b) => a.relPath.localeCompare(b.relPath));
   const lines = [
-    '# ai-governance upgrade patch',
+    `# ai-governance ${modeLabel} patch`,
     `# from=${fromVersion || 'unknown'} to=${toVersion}`,
     '',
   ];
@@ -1024,6 +1204,222 @@ function writeUpgradePatch(patchPath, actions, fromVersion, toVersion) {
   const destination = targetPath(patchPath);
   ensureDir(destination);
   writeFileSync(destination, `${lines.join('\n').replace(/\n+$/g, '')}\n`, 'utf8');
+}
+
+function writeUpgradePatch(patchPath, actions, fromVersion, toVersion) {
+  writeActionPatch(patchPath, 'upgrade', actions, fromVersion, toVersion);
+}
+
+function resolveAdoptPatchPath() {
+  return ADOPT_PATCH_PATH;
+}
+
+function buildAdoptCommand(runtimeOptions, options = {}) {
+  const parts = [
+    'npx @ramuks22/ai-agent-governance adopt',
+    `--preset ${runtimeOptions.preset}`,
+    `--hook-strategy ${runtimeOptions.hookStrategy}`,
+  ];
+  if (options.apply) parts.push('--apply');
+  if (options.force) parts.push('--force');
+  if (options.reportPath) parts.push(`--report ${options.reportPath}`);
+  return parts.join(' ');
+}
+
+function formatAdoptReport({
+  reportPath,
+  patchPath,
+  mode,
+  profile,
+  runtimeOptions,
+  blockers,
+  actions,
+}) {
+  const rows = [...actions].sort((a, b) => a.relPath.localeCompare(b.relPath));
+  const lines = [
+    '# AI Governance Adopt Report',
+    '',
+    `- Generated: ${new Date().toISOString()}`,
+    `- Mode: ${mode}`,
+    `- Report Path: ${reportPath}`,
+    `- Patch Path: ${patchPath}`,
+    '',
+    '## Detection Summary',
+    '',
+    `- packageManager: ${profile.packageManager}`,
+    `- layout: ${profile.layout}`,
+    `- moduleType: ${profile.moduleType}`,
+    `- inferredPreset: ${profile.inferredPreset || 'none'}`,
+    `- inferredHookStrategy: ${profile.inferredHookStrategy}`,
+    `- hasManifest: ${profile.hasManifest}`,
+    `- hasGovernanceConfig: ${profile.hasGovernanceConfig}`,
+    `- hasTracker: ${profile.hasTracker}`,
+    `- selectedPreset: ${runtimeOptions.preset} (source=${runtimeOptions.presetSource})`,
+    `- selectedHookStrategy: ${runtimeOptions.hookStrategy} (source=${runtimeOptions.hookStrategySource})`,
+    '',
+    '## Blockers',
+    '',
+  ];
+
+  if (blockers.length) {
+    for (const blocker of blockers) {
+      lines.push(`- ${blocker}`);
+    }
+  } else {
+    lines.push('- none');
+  }
+
+  lines.push('', '## Recommended Commands', '');
+  lines.push(`- Report-only: \`${buildAdoptCommand(runtimeOptions, { reportPath })}\``);
+  lines.push(`- Apply: \`${buildAdoptCommand(runtimeOptions, { apply: true })}\``);
+  lines.push(`- Apply (force): \`${buildAdoptCommand(runtimeOptions, { apply: true, force: true })}\``);
+
+  lines.push('', '## Planned Actions', '');
+  lines.push('| Action | Path | Reason |');
+  lines.push('| --- | --- | --- |');
+  for (const action of rows) {
+    lines.push(`| ${action.action} | ${action.relPath} | ${action.reason || ''} |`);
+  }
+
+  lines.push('', '## Patch Artifact', '', `- ${patchPath}`, '');
+  return `${lines.join('\n')}\n`;
+}
+
+function runAdopt(options) {
+  const manifest = readManifest();
+  const profile = detectAdoptRepoProfile();
+  const runtimeOptions = resolveAdoptRuntimeOptions(options, manifest, profile);
+  const forceEnabled = runtimeOptions.apply && runtimeOptions.force;
+  const conflictState = detectHookManagers();
+  const managedEntries = collectManagedItems(runtimeOptions);
+  const actions = [];
+  const conflicts = [];
+
+  for (const entry of managedEntries) {
+    const status = fileStatusForAdoptEntry(entry, manifest);
+    const action = { relPath: entry.relPath, stage: entry.stage, ...status };
+    actions.push(action);
+    if (status.action === 'conflict' || status.action === 'corrupt') {
+      conflicts.push(action);
+    }
+  }
+
+  if (forceEnabled) {
+    for (const action of actions) {
+      if (action.action === 'conflict' || action.action === 'corrupt' || action.action === 'outdated') {
+        action.action = 'update';
+      }
+    }
+  }
+
+  const softBlockers = [];
+  if (conflicts.length && !forceEnabled) {
+    softBlockers.push(
+      `${conflicts.length} managed file conflict(s) detected; rerun with --apply --force to overwrite managed targets.`
+    );
+  }
+
+  if (runtimeOptions.apply && isGitRepo() && !forceEnabled) {
+    const dirty = execText('git', ['status', '--porcelain']);
+    if ((dirty || '').trim().length > 0) {
+      softBlockers.push('git working tree is dirty; commit/stash changes or rerun with --apply --force.');
+    }
+  }
+
+  const reportPath = runtimeOptions.reportPath || ADOPT_REPORT_PATH;
+  const patchPath = resolveAdoptPatchPath();
+  const patchActions = actions.filter((action) => !['noop', 'keep-existing', 'adopt-existing'].includes(action.action));
+  writeActionPatch(
+    patchPath,
+    'adopt',
+    patchActions,
+    manifest?.packageVersion || 'current',
+    packageVersion()
+  );
+
+  const reportBlockers = [...runtimeOptions.blockers, ...softBlockers];
+  const report = formatAdoptReport({
+    reportPath,
+    patchPath,
+    mode: runtimeOptions.apply ? 'apply' : 'report-only',
+    profile,
+    runtimeOptions,
+    blockers: reportBlockers,
+    actions,
+  });
+  const reportFile = targetPath(reportPath);
+  ensureDir(reportFile);
+  writeFileSync(reportFile, report, 'utf8');
+
+  info(`[governance:adopt] Wrote report: ${reportPath}`);
+  info(`[governance:adopt] Wrote patch: ${patchPath}`);
+  info('[governance:adopt] Planned actions:');
+  for (const action of [...actions].sort((a, b) => a.relPath.localeCompare(b.relPath))) {
+    info(`- ${action.action.padEnd(13)} ${action.relPath}`);
+  }
+
+  if (!runtimeOptions.apply) {
+    if (reportBlockers.length) {
+      failBlocked(`✖ adopt blocked. Review ${reportPath} and patch ${patchPath}.`);
+    }
+    info('[governance:adopt] Report-only analysis complete.');
+    return;
+  }
+
+  const applyBlockers = forceEnabled
+    ? [...runtimeOptions.blockers]
+    : [...runtimeOptions.blockers, ...softBlockers];
+  if (applyBlockers.length) {
+    failBlocked(`✖ adopt apply blocked. Review ${reportPath} and resolve blockers.`);
+  }
+
+  const plannedWrites = actions.filter((action) => ['create', 'update'].includes(action.action));
+  const nextManifestPreview = buildManifest(runtimeOptions, managedEntries, {
+    hookConflictDetected: conflictState.hasConflict && runtimeOptions.hookStrategy === 'auto',
+    coreHooksConfigured: false,
+  });
+  const shouldCaptureSnapshot = plannedWrites.length > 0
+    || manifestComparable(manifest) !== manifestComparable(nextManifestPreview);
+  const backupTargets = [...plannedWrites.map((action) => action.relPath), MANIFEST_PATH];
+  const backupEntry = shouldCaptureSnapshot
+    ? createBackupSnapshot(manifest, packageVersion(), backupTargets)
+    : null;
+
+  for (const action of plannedWrites) {
+    writeManagedFile(action.relPath, action.plannedContent);
+  }
+
+  const gitHookWrites = writeGitHooks(runtimeOptions);
+  const coreHooksConfigured = configureHooksPath(runtimeOptions, conflictState);
+  const nextManifest = buildManifest(runtimeOptions, managedEntries, {
+    hookConflictDetected: conflictState.hasConflict && runtimeOptions.hookStrategy === 'auto' && !coreHooksConfigured,
+    coreHooksConfigured,
+  });
+  const shouldWriteManifest = manifestComparable(manifest) !== manifestComparable(nextManifest);
+  if (shouldWriteManifest) {
+    ensureDir(targetPath(MANIFEST_PATH));
+    writeFileSync(targetPath(MANIFEST_PATH), `${JSON.stringify(nextManifest, null, 2)}\n`, 'utf8');
+    info(`[governance:adopt] Wrote manifest: ${MANIFEST_PATH}`);
+  } else {
+    info('[governance:adopt] Manifest unchanged.');
+  }
+
+  if (gitHookWrites.length) {
+    info('[governance:adopt] Installed git hooks:');
+    for (const file of gitHookWrites) info(`  - ${file}`);
+  }
+
+  if (backupEntry) {
+    info(`[governance:adopt] Snapshot saved: ${backupEntry.id}`);
+    info(`[governance:adopt] Rollback: npx @ramuks22/ai-agent-governance rollback --to ${backupEntry.id}`);
+  }
+
+  if (!plannedWrites.length && !gitHookWrites.length && !shouldWriteManifest) {
+    info('[governance:adopt] No changes required.');
+    return;
+  }
+
+  info('[governance:adopt] Apply complete.');
 }
 
 async function runInit(options) {
@@ -1651,6 +2047,11 @@ async function main() {
 
   if (options.mode === 'upgrade') {
     runUpgrade(options);
+    process.exit(0);
+  }
+
+  if (options.mode === 'adopt') {
+    runAdopt(options);
     process.exit(0);
   }
 
