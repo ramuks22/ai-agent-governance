@@ -61,6 +61,47 @@ node scripts/install-githooks.mjs
 npm run governance:check
 ```
 
+## Onboarding Paths (Stage 7)
+
+Choose one path based on repository state:
+
+| Repository State | Recommended Path |
+|---|---|
+| Greenfield (new repo) | Scaffold from `templates/greenfield` (degit or GitHub Template), then run `npm run governance:bootstrap` |
+| Existing repo | Use Stage 6 migration flow with `adopt` |
+
+### Greenfield Path (Template)
+
+`degit`:
+
+```bash
+npx degit ramuks22/ai-agent-governance/templates/greenfield my-new-project
+cd my-new-project
+npm install
+npm run governance:bootstrap
+```
+
+GitHub Template:
+
+1. Use the GitHub Template repository generated from `templates/greenfield`.
+2. Clone your new repository.
+3. Run:
+   ```bash
+   npm install
+   npm run governance:bootstrap
+   ```
+
+Manual publication and update process for GitHub Template distribution:
+
+- `docs/development/greenfield-template-publication-runbook.md`
+
+### Existing Repository Path (Migration)
+
+```bash
+npx @ramuks22/ai-agent-governance adopt --report .governance/adopt-report.md
+npx @ramuks22/ai-agent-governance adopt --apply
+```
+
 ## Source of Truth Map
 
 | Document | Purpose |
@@ -361,7 +402,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 Stage 0-5 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration). Stage 6 is active via AG-GOV-030/031/032; Stage 7+ remains roadmap.
+- AG-GOV-003 Stage 0-6 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration). Stage 7 is active via AG-GOV-033/034/035; Stage 8+ remains roadmap.
 
 ## License
 

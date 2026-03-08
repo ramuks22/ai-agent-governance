@@ -2,7 +2,7 @@
 
 This folder contains the governance framework documentation.
 
-## Installable Distribution (AG-GOV-003 Stage 6)
+## Installable Distribution (AG-GOV-003 Stage 7)
 
 Package-first commands:
 
@@ -18,9 +18,15 @@ Package-first commands:
 
 Legacy/manual mode remains supported as fallback.
 
+Onboarding split:
+
+- Greenfield repos: scaffold from `templates/greenfield` (degit or GitHub Template), then run `npm run governance:bootstrap`.
+- Existing repos: use Stage 6 migration (`adopt`) commands.
+
 ## Source of Truth
 
 - `docs/development/delivery-governance.md` - delivery rules and quality gates
+- `docs/development/greenfield-template-publication-runbook.md` - manual publication process for GitHub Template distribution (operational guidance)
 - `.agent/workflows/governance.md` - workflow rules and stop conditions
 - `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)` - canonical governance terminology
 - `.agent/workflows/requirements-workshop.md` - feature requirements workshop workflow
@@ -48,3 +54,4 @@ Legacy/manual mode remains supported as fallback.
 - `docs/requirements/AG-GOV-003-stage4/workshop.md` - shared workshop artifact for Stage 4 presets/wizard delivery
 - `docs/requirements/AG-GOV-003-stage5/workshop.md` - shared workshop artifact for Stage 5 CI integration
 - `docs/requirements/AG-GOV-003-stage6/workshop.md` - shared workshop artifact for Stage 6 adopt migration flow
+- `docs/requirements/AG-GOV-003-stage7/workshop.md` - shared workshop artifact for Stage 7 greenfield template distribution
