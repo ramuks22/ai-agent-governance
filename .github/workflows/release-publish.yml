@@ -1,0 +1,117 @@
+name: Release Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Execute publish + tag steps (requires explicit human approval)
+        required: false
+        default: false
+        type: boolean
+      dist_tag:
+        description: npm dist-tag
+        required: false
+        default: latest
+        type: choice
+        options:
+          - latest
+          - next
+      tag:
+        description: Optional git tag override (defaults to v<package.json.version>)
+        required: false
+        default: ''
+        type: string
+      node_version:
+        description: Node version for release-publish runtime
+        required: false
+        default: '20'
+        type: string
+      install_command:
+        description: Dependency install command
+        required: false
+        default: npm ci
+        type: string
+  workflow_call:
+    inputs:
+      apply:
+        description: Execute publish + tag steps
+        required: false
+        default: false
+        type: boolean
+      dist_tag:
+        description: npm dist-tag
+        required: false
+        default: latest
+        type: string
+      tag:
+        description: Optional git tag override
+        required: false
+        default: ''
+        type: string
+      node_version:
+        description: Node version for release-publish runtime
+        required: false
+        default: '20'
+        type: string
+      install_command:
+        description: Dependency install command
+        required: false
+        default: npm ci
+        type: string
+    secrets:
+      npm_token:
+        required: false
+
+jobs:
+  release-publish:
+    runs-on: ubuntu-latest
+    environment: release-publish
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: ${{ inputs.install_command }}
+
+      - name: Configure git identity for release tags
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Release Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.npm_token || secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARGS=(--out-dir .governance/release-check --dist-tag "${{ inputs.dist_tag }}")
+          if [ -n "${{ inputs.tag }}" ]; then
+            ARGS+=(--tag "${{ inputs.tag }}")
+          fi
+          if [ "${{ inputs.apply }}" = "true" ]; then
+            ARGS+=(--apply)
+          fi
+          npx --no-install ai-governance release-publish "${ARGS[@]}"
+
+      - name: Upload release-publish artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-publish-report
+          path: |
+            .governance/release-check/release-plan.json
+            .governance/release-check/release-plan.md
+            .governance/release-check/release-result.json
+            .governance/release-check/release-result.md
+          if-no-files-found: warn
+          retention-days: 14

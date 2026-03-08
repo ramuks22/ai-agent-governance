@@ -37,6 +37,9 @@ const ADOPT_REPORT_PATH = '.governance/adopt-report.md';
 const ADOPT_PATCH_PATH = '.governance/patches/adopt.patch';
 const RELEASE_REPORT_DEFAULT_DIR = '.governance/release-check';
 const RELEASE_CHECK_REPORT_SCHEMA_VERSION = '1.0';
+const RELEASE_PUBLISH_PLAN_SCHEMA_VERSION = '1.0';
+const RELEASE_PUBLISH_RESULT_SCHEMA_VERSION = '1.0';
+const RELEASE_PUBLISH_DEFAULT_DIST_TAG = 'latest';
 const RELEASE_POLICY_PATH = 'docs/development/release-maintenance-policy.md';
 const STAGE0_DECISION_PATH = 'plans/ag-gov-003-stage0-decision-doc.md';
 const TEMPLATE_PACKAGE_PATH = 'templates/greenfield/package.json';
@@ -493,6 +496,8 @@ function parseArgs(argv) {
   let applyProvided = false;
   let reportProvided = false;
   let outDirProvided = false;
+  let distTagProvided = false;
+  let tagProvided = false;
   let reportValue = '';
   const options = {
     mode: 'check',
@@ -504,6 +509,8 @@ function parseArgs(argv) {
     reportPath: ADOPT_REPORT_PATH,
     releaseReportFormat: null,
     releaseOutDir: RELEASE_REPORT_DEFAULT_DIR,
+    releasePublishDistTag: RELEASE_PUBLISH_DEFAULT_DIST_TAG,
+    releasePublishTag: '',
     rollbackTo: null,
     preset: 'node-npm-cjs',
     presetProvided: false,
@@ -521,6 +528,7 @@ function parseArgs(argv) {
     else if (arg === '--doctor') options.mode = 'doctor';
     else if (arg === '--ci-check') options.mode = 'ci-check';
     else if (arg === '--release-check') options.mode = 'release-check';
+    else if (arg === '--release-publish') options.mode = 'release-publish';
     else if (arg === '--upgrade') options.mode = 'upgrade';
     else if (arg === '--adopt') options.mode = 'adopt';
     else if (arg === '--rollback') options.mode = 'rollback';
@@ -585,6 +593,20 @@ function parseArgs(argv) {
     } else if (arg.startsWith('--scope=')) {
       options.releaseScope = arg.split('=')[1];
       scopeProvided = true;
+    } else if (arg === '--dist-tag' && argv[i + 1]) {
+      options.releasePublishDistTag = argv[i + 1];
+      distTagProvided = true;
+      i += 1;
+    } else if (arg.startsWith('--dist-tag=')) {
+      options.releasePublishDistTag = arg.split('=')[1];
+      distTagProvided = true;
+    } else if (arg === '--tag' && argv[i + 1]) {
+      options.releasePublishTag = argv[i + 1];
+      tagProvided = true;
+      i += 1;
+    } else if (arg.startsWith('--tag=')) {
+      options.releasePublishTag = arg.split('=')[1];
+      tagProvided = true;
     } else {
       fail(`✖ Unknown option: ${arg}`);
     }
@@ -617,12 +639,12 @@ function parseArgs(argv) {
     fail('✖ --scope is only supported with --release-check.');
   }
 
-  if (options.mode !== 'adopt' && applyProvided) {
-    fail('✖ --apply is only supported with --adopt.');
+  if (!['adopt', 'release-publish'].includes(options.mode) && applyProvided) {
+    fail('✖ --apply is only supported with --adopt or --release-publish.');
   }
 
-  if (options.mode !== 'release-check' && outDirProvided) {
-    fail('✖ --out-dir is only supported with --release-check.');
+  if (!['release-check', 'release-publish'].includes(options.mode) && outDirProvided) {
+    fail('✖ --out-dir is only supported with --release-check or --release-publish.');
   }
 
   if (options.mode !== 'adopt' && options.mode !== 'release-check' && reportProvided) {
@@ -650,6 +672,23 @@ function parseArgs(argv) {
     }
   }
 
+  if (options.mode !== 'release-publish' && distTagProvided) {
+    fail('✖ --dist-tag is only supported with --release-publish.');
+  }
+
+  if (options.mode !== 'release-publish' && tagProvided) {
+    fail('✖ --tag is only supported with --release-publish.');
+  }
+
+  if (options.mode === 'release-publish') {
+    if (!['latest', 'next'].includes(options.releasePublishDistTag)) {
+      fail('✖ Invalid --dist-tag value for --release-publish. Allowed: latest, next');
+    }
+    if (tagProvided && !options.releasePublishTag.trim()) {
+      fail('✖ --tag requires a non-empty value for --release-publish.');
+    }
+  }
+
   if (!['precommit', 'prepush', 'all'].includes(options.ciGate)) {
     fail("✖ Invalid --gate value. Allowed: precommit, prepush, all");
   }
@@ -673,6 +712,7 @@ Modes:
   --init                Initialize governance artifacts
   --ci-check            Run configured governance gates for CI parity
   --release-check       Run release maintenance/distribution preflight checks
+  --release-publish     Run controlled publish execution with release evidence output
   --doctor              Show detailed diagnostics
   --upgrade             Upgrade managed governance artifacts
   --adopt               Analyze/adopt existing repositories into managed governance artifacts
@@ -683,7 +723,7 @@ Options:
   --wizard              Interactive preset selection for init (mutually exclusive with --preset)
   --hook-strategy <s>   Hook install strategy: auto|core-hooks|git-hooks
   --dry-run             Print planned actions without writing files
-  --apply               Write managed changes during --adopt (default: report-only)
+  --apply               Write managed changes during --adopt or execute publish/tag steps during --release-publish
   --force               Overwrite conflicts or bypass rollback clean-tree check
   --patch[=<path>]      Write deterministic patch output during upgrade planning
   --report <value>      For --adopt: report path. For --release-check: json|md|both
@@ -691,6 +731,8 @@ Options:
   --to <backup-id>      Backup ID for rollback target (default: latest)
   --gate <name>         Gate scope for --ci-check: precommit|prepush|all
   --scope <name>        Scope for --release-check: maintenance|distribution|all
+  --dist-tag <name>     Dist-tag for --release-publish: latest|next (default: latest)
+  --tag <name>          Git tag for --release-publish (default: v<package.json.version>)
   --skip-hooks          Skip hook validation (also auto-skipped when CI=true)
   --help, -h            Show this help message
 
@@ -699,6 +741,8 @@ Examples:
   node scripts/governance-check.mjs --init --wizard --hook-strategy auto
   node scripts/governance-check.mjs --ci-check --gate all
   node scripts/governance-check.mjs --release-check --scope all --report both --out-dir .governance/release-check
+  node scripts/governance-check.mjs --release-publish --out-dir .governance/release-check
+  node scripts/governance-check.mjs --release-publish --apply --dist-tag next --tag v1.2.3
   node scripts/governance-check.mjs --upgrade --dry-run --patch
   node scripts/governance-check.mjs --adopt --report .governance/adopt-report.md
   node scripts/governance-check.mjs --adopt --apply --force --preset node-npm-cjs
@@ -2334,6 +2378,523 @@ function runReleaseCheck(options) {
   info(`[governance:release-check] PASS (scope=${options.releaseScope})`);
 }
 
+function summarizeCommandOutput(result) {
+  const text = [result.stdout, result.stderr].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  return text || 'no output';
+}
+
+function buildReleasePublishCommand(options, releaseTag) {
+  const parts = ['release-publish', `--dist-tag ${options.releasePublishDistTag}`, `--tag ${releaseTag}`];
+  if (options.apply) parts.push('--apply');
+  if (options.releaseOutDir && options.releaseOutDir !== RELEASE_REPORT_DEFAULT_DIR) {
+    parts.push(`--out-dir ${options.releaseOutDir}`);
+  } else {
+    parts.push(`--out-dir ${RELEASE_REPORT_DEFAULT_DIR}`);
+  }
+  return `npx @ramuks22/ai-agent-governance ${parts.join(' ')}`;
+}
+
+function createReleasePublishCheck(id, title, ok, detail) {
+  return {
+    id,
+    title,
+    ok,
+    detail: redactSensitiveText(detail),
+  };
+}
+
+function readReleasePublishPackageMetadata() {
+  const pkgPath = targetPath('package.json');
+  if (!existsSync(pkgPath)) {
+    return { ok: false, detail: 'missing package.json in repository root' };
+  }
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    if (!pkg || typeof pkg !== 'object') {
+      return { ok: false, detail: 'invalid package.json object' };
+    }
+    if (typeof pkg.name !== 'string' || !pkg.name.trim()) {
+      return { ok: false, detail: 'package.json must include non-empty name' };
+    }
+    if (typeof pkg.version !== 'string' || !pkg.version.trim()) {
+      return { ok: false, detail: 'package.json must include non-empty version' };
+    }
+    return { ok: true, pkg };
+  } catch {
+    return { ok: false, detail: 'failed to parse package.json' };
+  }
+}
+
+function evaluateReleasePublishPreconditions(options) {
+  const checks = [];
+  const add = (id, title, ok, detail) => checks.push(createReleasePublishCheck(id, title, ok, detail));
+
+  const inGitRepo = isGitRepo();
+  add('publish.git-repo', 'Inside git work tree', inGitRepo, inGitRepo ? 'git repository detected' : 'not inside a git repository');
+
+  let isCleanTree = false;
+  let currentBranch = '';
+  if (inGitRepo) {
+    const statusResult = runCommand('git', ['status', '--porcelain']);
+    if (!statusResult.ok) {
+      add('publish.clean-tree', 'Working tree clean', false, `failed to read git status: ${summarizeCommandOutput(statusResult)}`);
+    } else {
+      isCleanTree = statusResult.stdout.trim().length === 0;
+      add('publish.clean-tree', 'Working tree clean', isCleanTree, isCleanTree ? 'working tree is clean' : 'working tree has local changes');
+    }
+
+    const branchResult = runCommand('git', ['branch', '--show-current']);
+    if (!branchResult.ok || !branchResult.stdout.trim()) {
+      add('publish.main-branch', 'Current branch is main', false, `failed to resolve current branch: ${summarizeCommandOutput(branchResult)}`);
+    } else {
+      currentBranch = branchResult.stdout.trim();
+      add('publish.main-branch', 'Current branch is main', currentBranch === 'main', `current branch=${currentBranch}`);
+    }
+  } else {
+    add('publish.clean-tree', 'Working tree clean', false, 'skipped because repository is not a git work tree');
+    add('publish.main-branch', 'Current branch is main', false, 'skipped because repository is not a git work tree');
+  }
+
+  const packageMeta = readReleasePublishPackageMetadata();
+  let packageName = '';
+  let packageVersionText = '';
+  let releaseTag = '';
+  if (!packageMeta.ok) {
+    add('publish.package-metadata', 'Package metadata available', false, packageMeta.detail);
+    add('publish.semver-version', 'Package version is valid semver', false, 'skipped because package metadata is invalid');
+    add('publish.tag-available', 'Release tag does not already exist', false, 'skipped because package metadata is invalid');
+  } else {
+    const pkg = packageMeta.pkg;
+    packageName = pkg.name.trim();
+    packageVersionText = pkg.version.trim();
+    releaseTag = (options.releasePublishTag || `v${packageVersionText}`).trim();
+    add('publish.package-metadata', 'Package metadata available', true, `${packageName}@${packageVersionText}`);
+
+    const semverOk = Boolean(semver.valid(packageVersionText));
+    add(
+      'publish.semver-version',
+      'Package version is valid semver',
+      semverOk,
+      semverOk ? `version ${packageVersionText} is valid semver` : `version ${packageVersionText} is not valid semver`
+    );
+
+    if (inGitRepo) {
+      const tagCheck = runCommand('git', ['rev-parse', '-q', '--verify', `refs/tags/${releaseTag}`]);
+      add(
+        'publish.tag-available',
+        'Release tag does not already exist',
+        !tagCheck.ok,
+        !tagCheck.ok ? `tag ${releaseTag} is available` : `tag ${releaseTag} already exists`
+      );
+    } else {
+      add('publish.tag-available', 'Release tag does not already exist', false, 'skipped because repository is not a git work tree');
+    }
+  }
+
+  if (packageName && packageVersionText) {
+    const whoami = runCommand('npm', ['whoami']);
+    add(
+      'publish.npm-auth',
+      'npm auth is available',
+      whoami.ok && Boolean(whoami.stdout.trim()),
+      whoami.ok ? `npm auth user=${whoami.stdout.trim()}` : `npm whoami failed: ${summarizeCommandOutput(whoami)}`
+    );
+
+    const versionLookup = runCommand('npm', ['view', `${packageName}@${packageVersionText}`, 'version']);
+    const lookupText = summarizeCommandOutput(versionLookup);
+    const notFound = /E404|404 Not Found|not found/i.test(lookupText);
+    const unpublished = !versionLookup.ok && notFound;
+    const lookupOk = unpublished || (versionLookup.ok ? false : false);
+    add(
+      'publish.version-unpublished',
+      'Package version is not already published',
+      lookupOk,
+      unpublished
+        ? `${packageName}@${packageVersionText} is not published`
+        : (versionLookup.ok
+          ? `${packageName}@${packageVersionText} is already published`
+          : `failed to verify published version: ${lookupText}`)
+    );
+  } else {
+    add('publish.npm-auth', 'npm auth is available', false, 'skipped because package metadata is invalid');
+    add('publish.version-unpublished', 'Package version is not already published', false, 'skipped because package metadata is invalid');
+  }
+
+  const releaseCheckArgs = [
+    fileURLToPath(import.meta.url),
+    '--release-check',
+    '--scope',
+    'all',
+    '--report',
+    'both',
+    '--out-dir',
+    options.releaseOutDir || RELEASE_REPORT_DEFAULT_DIR,
+  ];
+  const releaseCheckResult = runCommand(process.execPath, releaseCheckArgs);
+  add(
+    'publish.release-check',
+    'release-check all-scope validation passes',
+    releaseCheckResult.ok,
+    releaseCheckResult.ok
+      ? 'release-check --scope all passed'
+      : `release-check failed: ${summarizeCommandOutput(releaseCheckResult)}`
+  );
+
+  const packDryRun = runCommand('npm', ['pack', '--dry-run']);
+  add(
+    'publish.pack-dry-run',
+    'npm pack --dry-run succeeds',
+    packDryRun.ok,
+    packDryRun.ok ? 'npm pack --dry-run passed' : `npm pack --dry-run failed: ${summarizeCommandOutput(packDryRun)}`
+  );
+
+  const blocked = checks.some((check) => !check.ok);
+  return {
+    checks,
+    blocked,
+    packageName,
+    packageVersion: packageVersionText,
+    releaseTag: releaseTag || (packageVersionText ? `v${packageVersionText}` : ''),
+    branch: currentBranch,
+    cleanTree: isCleanTree,
+  };
+}
+
+function buildReleasePublishFailureContract(failureStage, reason, safeToRetry, releaseTag, mode) {
+  const manualSteps = [];
+  if (failureStage === 'preconditions') {
+    manualSteps.push('Review release-plan.md and resolve blocked preconditions.');
+    manualSteps.push('Re-run release-publish without --apply to verify readiness.');
+    if (mode === 'apply') {
+      manualSteps.push('After readiness is PASS, rerun with --apply.');
+    }
+  } else if (failureStage === 'git-tag-push') {
+    manualSteps.push(`Push the tag manually: git push origin ${releaseTag}`);
+    manualSteps.push('Confirm tag visibility on remote before announcing release.');
+  } else if (failureStage === 'git-tag-create') {
+    manualSteps.push(`Create and push the tag manually: git tag -a ${releaseTag} -m "release ${releaseTag}" && git push origin ${releaseTag}`);
+  } else if (failureStage === 'npm-publish') {
+    manualSteps.push('Resolve npm publish failure and rerun release-publish --apply once preconditions pass.');
+  } else {
+    manualSteps.push('Review release-result.md and follow the remediation guidance.');
+  }
+
+  const rollbackGuidance = failureStage === 'preconditions'
+    ? 'No publish/tag changes were made.'
+    : 'Do not auto-unpublish. Use manual recovery and verify npm/tag state before retrying.';
+
+  return {
+    failureStage,
+    reason: redactSensitiveText(reason),
+    safeToRetry,
+    manualSteps: manualSteps.map((step) => redactSensitiveText(step)),
+    rollbackGuidance,
+  };
+}
+
+function buildReleasePublishPlan(options, preconditions, runtimeFailure = null) {
+  const rendered = preconditions.checks.map((check) => ({
+    id: check.id,
+    title: check.title,
+    status: check.ok ? 'PASS' : 'BLOCKED',
+    detail: check.detail,
+  }));
+  const passed = rendered.filter((check) => check.status === 'PASS').length;
+  const blocked = rendered.length - passed;
+  const releaseTag = preconditions.releaseTag || (preconditions.packageVersion ? `v${preconditions.packageVersion}` : '');
+  const result = runtimeFailure ? 'BLOCKED' : (blocked > 0 ? 'BLOCKED' : 'READY');
+
+  const payload = {
+    schemaVersion: RELEASE_PUBLISH_PLAN_SCHEMA_VERSION,
+    generatedAtUtc: new Date().toISOString(),
+    toolVersion: packageVersion(),
+    command: buildReleasePublishCommand(options, releaseTag),
+    mode: options.apply ? 'apply' : 'dry-run',
+    package: {
+      name: preconditions.packageName || '(unknown)',
+      version: preconditions.packageVersion || '(unknown)',
+    },
+    branch: preconditions.branch || '(unknown)',
+    distTag: options.releasePublishDistTag,
+    tag: releaseTag || '(unknown)',
+    outDir: options.releaseOutDir || RELEASE_REPORT_DEFAULT_DIR,
+    result,
+    summary: {
+      total: rendered.length,
+      passed,
+      blocked,
+    },
+    preconditions: rendered,
+  };
+
+  if (runtimeFailure) {
+    payload.failure = runtimeFailure;
+  } else if (blocked > 0) {
+    const firstBlocked = rendered.find((check) => check.status === 'BLOCKED');
+    payload.failure = buildReleasePublishFailureContract(
+      'preconditions',
+      firstBlocked ? firstBlocked.detail : 'preconditions failed',
+      true,
+      releaseTag,
+      options.apply ? 'apply' : 'dry-run'
+    );
+  }
+
+  const redacted = redactValue(payload);
+  return redacted;
+}
+
+function formatReleasePublishPlanMarkdown(report) {
+  const lines = [
+    '# Release Publish Plan',
+    '',
+    `- Schema Version: \`${report.schemaVersion}\``,
+    `- Generated At (UTC): \`${report.generatedAtUtc}\``,
+    `- Tool Version: \`${report.toolVersion}\``,
+    `- Command: \`${report.command}\``,
+    `- Mode: \`${report.mode}\``,
+    `- Package: \`${report.package.name}@${report.package.version}\``,
+    `- Branch: \`${report.branch}\``,
+    `- Dist Tag: \`${report.distTag}\``,
+    `- Tag: \`${report.tag}\``,
+    `- Output Directory: \`${report.outDir}\``,
+    `- Result: \`${report.result}\``,
+    `- Summary: total=${report.summary.total}, passed=${report.summary.passed}, blocked=${report.summary.blocked}`,
+    '',
+    '## Preconditions',
+  ];
+
+  for (const check of report.preconditions) {
+    lines.push('');
+    lines.push(`### ${check.status} ${check.id}`);
+    lines.push(`- Title: ${check.title}`);
+    lines.push(`- Detail: ${check.detail}`);
+  }
+
+  if (report.failure) {
+    lines.push('');
+    lines.push('## Failure');
+    lines.push(`- failureStage: ${report.failure.failureStage}`);
+    lines.push(`- reason: ${report.failure.reason}`);
+    lines.push(`- safeToRetry: ${report.failure.safeToRetry}`);
+    lines.push('- manualSteps:');
+    for (const step of report.failure.manualSteps) {
+      lines.push(`  - ${step}`);
+    }
+    lines.push(`- rollbackGuidance: ${report.failure.rollbackGuidance}`);
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+function buildReleasePublishResult(options, preconditions, steps, failure = null) {
+  const releaseTag = preconditions.releaseTag || (preconditions.packageVersion ? `v${preconditions.packageVersion}` : '');
+  const renderedSteps = steps.map((step) => ({
+    id: step.id,
+    title: step.title,
+    status: step.ok ? 'PASS' : 'FAIL',
+    detail: redactSensitiveText(step.detail),
+    durationMs: step.durationMs,
+  }));
+  const failed = renderedSteps.filter((step) => step.status === 'FAIL').length;
+  const result = failed > 0 ? 'FAIL' : 'SUCCESS';
+
+  const payload = {
+    schemaVersion: RELEASE_PUBLISH_RESULT_SCHEMA_VERSION,
+    generatedAtUtc: new Date().toISOString(),
+    toolVersion: packageVersion(),
+    command: buildReleasePublishCommand(options, releaseTag),
+    mode: 'apply',
+    package: {
+      name: preconditions.packageName || '(unknown)',
+      version: preconditions.packageVersion || '(unknown)',
+    },
+    branch: preconditions.branch || '(unknown)',
+    distTag: options.releasePublishDistTag,
+    tag: releaseTag || '(unknown)',
+    outDir: options.releaseOutDir || RELEASE_REPORT_DEFAULT_DIR,
+    result,
+    summary: {
+      total: renderedSteps.length,
+      passed: renderedSteps.length - failed,
+      failed,
+    },
+    steps: renderedSteps,
+  };
+
+  if (failure) {
+    payload.failure = failure;
+  }
+
+  return redactValue(payload);
+}
+
+function formatReleasePublishResultMarkdown(report) {
+  const lines = [
+    '# Release Publish Result',
+    '',
+    `- Schema Version: \`${report.schemaVersion}\``,
+    `- Generated At (UTC): \`${report.generatedAtUtc}\``,
+    `- Tool Version: \`${report.toolVersion}\``,
+    `- Command: \`${report.command}\``,
+    `- Mode: \`${report.mode}\``,
+    `- Package: \`${report.package.name}@${report.package.version}\``,
+    `- Branch: \`${report.branch}\``,
+    `- Dist Tag: \`${report.distTag}\``,
+    `- Tag: \`${report.tag}\``,
+    `- Output Directory: \`${report.outDir}\``,
+    `- Result: \`${report.result}\``,
+    `- Summary: total=${report.summary.total}, passed=${report.summary.passed}, failed=${report.summary.failed}`,
+    '',
+    '## Steps',
+  ];
+
+  for (const step of report.steps) {
+    lines.push('');
+    lines.push(`### ${step.status} ${step.id}`);
+    lines.push(`- Title: ${step.title}`);
+    lines.push(`- Detail: ${step.detail}`);
+    lines.push(`- Duration Ms: ${step.durationMs}`);
+  }
+
+  if (report.failure) {
+    lines.push('');
+    lines.push('## Failure');
+    lines.push(`- failureStage: ${report.failure.failureStage}`);
+    lines.push(`- reason: ${report.failure.reason}`);
+    lines.push(`- safeToRetry: ${report.failure.safeToRetry}`);
+    lines.push('- manualSteps:');
+    for (const step of report.failure.manualSteps) {
+      lines.push(`  - ${step}`);
+    }
+    lines.push(`- rollbackGuidance: ${report.failure.rollbackGuidance}`);
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+function writeReleasePublishPlanArtifacts(report, outDir) {
+  const outRoot = targetPath(outDir);
+  mkdirSync(outRoot, { recursive: true });
+  writeFileAtomic(path.join(outRoot, 'release-plan.json'), `${JSON.stringify(report, null, 2)}\n`);
+  writeFileAtomic(path.join(outRoot, 'release-plan.md'), formatReleasePublishPlanMarkdown(report));
+  info(`[governance:release-publish] Wrote report: ${path.posix.join(outDir, 'release-plan.json')}`);
+  info(`[governance:release-publish] Wrote report: ${path.posix.join(outDir, 'release-plan.md')}`);
+}
+
+function writeReleasePublishResultArtifacts(report, outDir) {
+  const outRoot = targetPath(outDir);
+  mkdirSync(outRoot, { recursive: true });
+  writeFileAtomic(path.join(outRoot, 'release-result.json'), `${JSON.stringify(report, null, 2)}\n`);
+  writeFileAtomic(path.join(outRoot, 'release-result.md'), formatReleasePublishResultMarkdown(report));
+  info(`[governance:release-publish] Wrote report: ${path.posix.join(outDir, 'release-result.json')}`);
+  info(`[governance:release-publish] Wrote report: ${path.posix.join(outDir, 'release-result.md')}`);
+}
+
+function runReleasePublishStep(id, title, command, args) {
+  const startedAt = Date.now();
+  const result = runCommand(command, args);
+  const durationMs = Date.now() - startedAt;
+  const detail = result.ok
+    ? summarizeCommandOutput(result)
+    : summarizeCommandOutput(result);
+  return {
+    id,
+    title,
+    ok: result.ok,
+    detail,
+    durationMs,
+  };
+}
+
+function runReleasePublish(options) {
+  const outDir = options.releaseOutDir || RELEASE_REPORT_DEFAULT_DIR;
+  const preconditions = evaluateReleasePublishPreconditions(options);
+  const planReport = buildReleasePublishPlan(options, preconditions);
+  writeReleasePublishPlanArtifacts(planReport, outDir);
+
+  for (const check of preconditions.checks) {
+    const status = check.ok ? 'PASS' : 'BLOCKED';
+    info(`[governance:release-publish] ${status} ${check.id}: ${check.detail}`);
+  }
+
+  if (preconditions.blocked) {
+    failBlocked(`✖ release-publish blocked. Review ${path.posix.join(outDir, 'release-plan.md')} and resolve preconditions.`);
+  }
+
+  if (!options.apply) {
+    info(`[governance:release-publish] READY (dry-run). Use --apply to publish ${preconditions.packageName}@${preconditions.packageVersion}.`);
+    return;
+  }
+
+  const releaseTag = preconditions.releaseTag || `v${preconditions.packageVersion}`;
+  const steps = [];
+
+  const publishStep = runReleasePublishStep(
+    'publish.npm-publish',
+    'Publish package to npm',
+    'npm',
+    ['publish', '--access', 'public', '--tag', options.releasePublishDistTag]
+  );
+  steps.push(publishStep);
+  if (!publishStep.ok) {
+    const failure = buildReleasePublishFailureContract(
+      'npm-publish',
+      publishStep.detail,
+      true,
+      releaseTag,
+      'apply'
+    );
+    const resultReport = buildReleasePublishResult(options, preconditions, steps, failure);
+    writeReleasePublishResultArtifacts(resultReport, outDir);
+    fail(`✖ release-publish failed during npm publish. Review ${path.posix.join(outDir, 'release-result.md')}.`);
+  }
+
+  const tagStep = runReleasePublishStep(
+    'publish.git-tag-create',
+    'Create annotated git tag',
+    'git',
+    ['tag', '-a', releaseTag, '-m', `release ${releaseTag}`]
+  );
+  steps.push(tagStep);
+  if (!tagStep.ok) {
+    const failure = buildReleasePublishFailureContract(
+      'git-tag-create',
+      tagStep.detail,
+      false,
+      releaseTag,
+      'apply'
+    );
+    const resultReport = buildReleasePublishResult(options, preconditions, steps, failure);
+    writeReleasePublishResultArtifacts(resultReport, outDir);
+    fail(`✖ release-publish failed during git tag creation. Review ${path.posix.join(outDir, 'release-result.md')}.`);
+  }
+
+  const pushTagStep = runReleasePublishStep(
+    'publish.git-tag-push',
+    'Push git tag to origin',
+    'git',
+    ['push', 'origin', releaseTag]
+  );
+  steps.push(pushTagStep);
+  if (!pushTagStep.ok) {
+    const failure = buildReleasePublishFailureContract(
+      'git-tag-push',
+      pushTagStep.detail,
+      false,
+      releaseTag,
+      'apply'
+    );
+    const resultReport = buildReleasePublishResult(options, preconditions, steps, failure);
+    writeReleasePublishResultArtifacts(resultReport, outDir);
+    fail(`✖ release-publish failed during git tag push. Review ${path.posix.join(outDir, 'release-result.md')}.`);
+  }
+
+  const resultReport = buildReleasePublishResult(options, preconditions, steps);
+  writeReleasePublishResultArtifacts(resultReport, outDir);
+  info(`[governance:release-publish] SUCCESS ${preconditions.packageName}@${preconditions.packageVersion} dist-tag=${options.releasePublishDistTag} tag=${releaseTag}`);
+}
+
 function collectSupportedCiFiles() {
   const files = [];
   const githubWorkflowsDir = targetPath(path.join('.github', 'workflows'));
@@ -2574,6 +3135,11 @@ async function main() {
     process.exit(0);
   }
 
+  if (options.mode === 'release-publish') {
+    runReleasePublish(options);
+    process.exit(0);
+  }
+
   if (options.mode === 'upgrade') {
     runUpgrade(options);
     process.exit(0);
@@ -2604,6 +3170,8 @@ if (isDirectExecution) {
 
 export {
   RELEASE_CHECK_REPORT_SCHEMA_VERSION,
+  RELEASE_PUBLISH_PLAN_SCHEMA_VERSION,
+  RELEASE_PUBLISH_RESULT_SCHEMA_VERSION,
   redactSensitiveText,
   buildReleaseCheckReport,
 };

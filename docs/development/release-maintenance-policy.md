@@ -109,6 +109,27 @@ Stage 10 report contract:
 - Default behavior without `--report`: no report files written
 - Generated report files (when enabled): `.governance/release-check/report.json` and `.governance/release-check/report.md`
 
+Stage 11 controlled publish contract:
+
+- Command: `npx @ramuks22/ai-agent-governance release-publish`
+- Default mode (without `--apply`): dry-run readiness only; no publish/tag side effects.
+- Apply mode (`--apply`): executes publish in strict order:
+  1. `npm publish --access public --tag <dist-tag>`
+  2. create annotated git tag (`--tag` or default `v<package.json.version>`)
+  3. push tag to origin
+- Artifacts:
+  - always: `.governance/release-check/release-plan.json`, `.governance/release-check/release-plan.md`
+  - apply only: `.governance/release-check/release-result.json`, `.governance/release-check/release-result.md`
+- Dist-tag vs git-tag:
+  - dist-tag (`--dist-tag latest|next`) controls npm distribution channel.
+  - git-tag (`--tag`) is repository release history metadata.
+- Human approval requirement:
+  - apply runs are manual (`workflow_dispatch` or explicit local command), never cron.
+  - workflow apply path should use protected environment approval controls where available.
+- Partial failure recovery:
+  - if publish succeeds but tag push fails, no auto-unpublish is attempted.
+  - follow deterministic `manualSteps[]` in `release-result.md`, including `git push origin <tag>`.
+
 Run from repository root:
 
 1. Canonical section presence:
@@ -156,4 +177,10 @@ rg -n "Deprecation handling in Stage 8 is process-only \\(docs/changelog/tracker
 npm run governance:check
 npm run gate:precommit
 npm run gate:prepush
+```
+
+7. Stage 11 release-publish readiness:
+
+```bash
+npx @ramuks22/ai-agent-governance release-publish --out-dir .governance/release-check
 ```

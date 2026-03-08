@@ -15,6 +15,7 @@
     "governance:check": "node scripts/governance-check.mjs",
     "governance:ci-check": "node scripts/governance-check.mjs --ci-check --gate all",
     "governance:release-check": "node scripts/governance-check.mjs --release-check --scope all",
+    "governance:release-publish": "node scripts/governance-check.mjs --release-publish --out-dir .governance/release-check",
     "governance:doctor": "node scripts/governance-check.mjs --doctor",
     "governance:init": "node scripts/governance-check.mjs --init",
     "gate:precommit": "node scripts/gates.mjs pre-commit",
