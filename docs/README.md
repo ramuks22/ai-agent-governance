@@ -42,6 +42,7 @@ Legacy/manual mode remains supported as fallback.
 ## Examples
 
 - `docs/examples/AG-GOV-004-workshop.md` - canonical workshop example
+- `docs/examples/AG-GOV-009-workshop-adoption-examples.md` - concise workshop adoption examples for applicability, hotfix exception, and tracker evidence linkage
 - `docs/requirements/AG-GOV-003/workshop.md` - workshop artifact for installable distribution v1.0 scope
 - `docs/requirements/AG-GOV-003-stage3/workshop.md` - shared workshop artifact for Stage 3 upgrade/rollback/corruption handling
 - `docs/requirements/AG-GOV-003-stage4/workshop.md` - shared workshop artifact for Stage 4 presets/wizard delivery

@@ -237,6 +237,10 @@ Before implementation starts for feature-level work, run the workflow at
 
 Use `docs/templates/requirements-workshop-template.md` as the canonical structure.
 
+Quick copy-ready examples:
+
+- `docs/examples/AG-GOV-009-workshop-adoption-examples.md`
+
 Required for:
 
 - net-new features
