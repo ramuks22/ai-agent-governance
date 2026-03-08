@@ -87,6 +87,19 @@ npx ai-governance doctor
 
 ## Deterministic Validation Commands (AG-GOV-038)
 
+Preferred automation path (Stage 9):
+
+```bash
+npx @ramuks22/ai-agent-governance release-check --scope all
+```
+
+Scope-specific runs:
+
+```bash
+npx @ramuks22/ai-agent-governance release-check --scope maintenance
+npx @ramuks22/ai-agent-governance release-check --scope distribution
+```
+
 Run from repository root:
 
 1. Canonical section presence:

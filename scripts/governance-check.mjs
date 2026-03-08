@@ -34,6 +34,9 @@ const MANIFEST_PATH = '.governance/manifest.json';
 const BACKUP_INDEX_PATH = '.governance/backups/index.json';
 const ADOPT_REPORT_PATH = '.governance/adopt-report.md';
 const ADOPT_PATCH_PATH = '.governance/patches/adopt.patch';
+const RELEASE_POLICY_PATH = 'docs/development/release-maintenance-policy.md';
+const STAGE0_DECISION_PATH = 'plans/ag-gov-003-stage0-decision-doc.md';
+const TEMPLATE_PACKAGE_PATH = 'templates/greenfield/package.json';
 
 const PRESETS = {
   'node-npm-cjs': {
@@ -375,6 +378,7 @@ function parseArgs(argv) {
   let presetProvided = false;
   let hookStrategyProvided = false;
   let gateProvided = false;
+  let scopeProvided = false;
   let applyProvided = false;
   let reportProvided = false;
   const options = {
@@ -393,6 +397,7 @@ function parseArgs(argv) {
     hookStrategyProvided: false,
     configPath: process.env.GOVERNANCE_CONFIG || CONFIG_PATH,
     ciGate: 'all',
+    releaseScope: 'all',
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -400,6 +405,7 @@ function parseArgs(argv) {
     if (arg === '--init') options.mode = 'init';
     else if (arg === '--doctor') options.mode = 'doctor';
     else if (arg === '--ci-check') options.mode = 'ci-check';
+    else if (arg === '--release-check') options.mode = 'release-check';
     else if (arg === '--upgrade') options.mode = 'upgrade';
     else if (arg === '--adopt') options.mode = 'adopt';
     else if (arg === '--rollback') options.mode = 'rollback';
@@ -450,6 +456,13 @@ function parseArgs(argv) {
     } else if (arg.startsWith('--gate=')) {
       options.ciGate = arg.split('=')[1];
       gateProvided = true;
+    } else if (arg === '--scope' && argv[i + 1]) {
+      options.releaseScope = argv[i + 1];
+      scopeProvided = true;
+      i += 1;
+    } else if (arg.startsWith('--scope=')) {
+      options.releaseScope = arg.split('=')[1];
+      scopeProvided = true;
     } else {
       fail(`✖ Unknown option: ${arg}`);
     }
@@ -478,6 +491,10 @@ function parseArgs(argv) {
     fail('✖ --gate is only supported with --ci-check.');
   }
 
+  if (options.mode !== 'release-check' && scopeProvided) {
+    fail('✖ --scope is only supported with --release-check.');
+  }
+
   if (options.mode !== 'adopt' && applyProvided) {
     fail('✖ --apply is only supported with --adopt.');
   }
@@ -494,6 +511,10 @@ function parseArgs(argv) {
     fail("✖ Invalid --gate value. Allowed: precommit, prepush, all");
   }
 
+  if (!['maintenance', 'distribution', 'all'].includes(options.releaseScope)) {
+    fail("✖ Invalid --scope value. Allowed: maintenance, distribution, all");
+  }
+
   if (!['auto', 'core-hooks', 'git-hooks'].includes(options.hookStrategy)) {
     fail("✖ Invalid hook strategy. Allowed: auto, core-hooks, git-hooks");
   }
@@ -508,6 +529,7 @@ Usage: node scripts/governance-check.mjs [options]
 Modes:
   --init                Initialize governance artifacts
   --ci-check            Run configured governance gates for CI parity
+  --release-check       Run release maintenance/distribution preflight checks
   --doctor              Show detailed diagnostics
   --upgrade             Upgrade managed governance artifacts
   --adopt               Analyze/adopt existing repositories into managed governance artifacts
@@ -524,6 +546,7 @@ Options:
   --report <path>       Output report path for --adopt (default: .governance/adopt-report.md)
   --to <backup-id>      Backup ID for rollback target (default: latest)
   --gate <name>         Gate scope for --ci-check: precommit|prepush|all
+  --scope <name>        Scope for --release-check: maintenance|distribution|all
   --skip-hooks          Skip hook validation (also auto-skipped when CI=true)
   --help, -h            Show this help message
 
@@ -531,6 +554,7 @@ Examples:
   node scripts/governance-check.mjs --init --preset node-npm-cjs --hook-strategy auto
   node scripts/governance-check.mjs --init --wizard --hook-strategy auto
   node scripts/governance-check.mjs --ci-check --gate all
+  node scripts/governance-check.mjs --release-check --scope all
   node scripts/governance-check.mjs --upgrade --dry-run --patch
   node scripts/governance-check.mjs --adopt --report .governance/adopt-report.md
   node scripts/governance-check.mjs --adopt --apply --force --preset node-npm-cjs
@@ -1810,6 +1834,201 @@ function runCiCheck(options) {
   info(`[governance:ci-check] PASS (gate=${options.ciGate})`);
 }
 
+function evaluateReleaseMaintenanceChecks() {
+  const checks = [];
+  const add = (name, ok, detail) => checks.push({ name, ok, detail });
+  const policyAbs = targetPath(RELEASE_POLICY_PATH);
+
+  if (!existsSync(policyAbs)) {
+    add('maintenance.policy-file', false, `missing ${RELEASE_POLICY_PATH}`);
+    return checks;
+  }
+
+  const policy = readFileSync(policyAbs, 'utf8');
+  const expectedSections = [
+    '## Authority and Legacy Boundary',
+    '## Support Ownership and Escalation',
+    '## Support SLA',
+    '## Breaking Changes and Deprecation Workflow',
+    '## Compatibility Matrix (Current Contract)',
+    '## Install and Upgrade Paths',
+    '## Deterministic Validation Commands (AG-GOV-038)',
+  ];
+  const missingSections = expectedSections.filter((section) => !policy.includes(section));
+  add(
+    'maintenance.sections',
+    missingSections.length === 0,
+    missingSections.length === 0
+      ? 'canonical policy sections present'
+      : `missing sections: ${missingSections.join(', ')}`
+  );
+
+  const pointerDocs = ['README.md', 'docs/README.md', 'docs/development/delivery-governance.md', 'CONTRIBUTING.md'];
+  const missingPointers = pointerDocs.filter((relPath) => {
+    const abs = targetPath(relPath);
+    if (!existsSync(abs)) return true;
+    const content = readFileSync(abs, 'utf8');
+    return !content.includes(RELEASE_POLICY_PATH);
+  });
+  add(
+    'maintenance.pointer-consistency',
+    missingPointers.length === 0,
+    missingPointers.length === 0
+      ? 'release policy pointer present in source-of-truth docs'
+      : `missing pointer in: ${missingPointers.join(', ')}`
+  );
+
+  const packageJson = loadJson(targetPath('package.json'), 'package metadata');
+  const stage0Abs = targetPath(STAGE0_DECISION_PATH);
+  const stage0Content = existsSync(stage0Abs) ? readFileSync(stage0Abs, 'utf8') : '';
+  const compatibilityChecks = [];
+  if ((packageJson.engines || {}).node !== '>=20') {
+    compatibilityChecks.push('package.json engines.node must be >=20');
+  }
+  if (!/Node versions \| 20\.x and 22\.x/.test(policy)) {
+    compatibilityChecks.push('policy must declare Node versions 20.x and 22.x');
+  }
+  if (!/Package manager \(install\/runtime\) \| npm first-class/.test(policy)) {
+    compatibilityChecks.push('policy must declare npm first-class support');
+  }
+  if (!/Node versions:\s*20\.x and 22\.x/.test(stage0Content)) {
+    compatibilityChecks.push('Stage 0 decision doc must retain Node versions 20.x and 22.x baseline');
+  }
+  add(
+    'maintenance.compatibility-alignment',
+    compatibilityChecks.length === 0,
+    compatibilityChecks.length === 0
+      ? 'compatibility contract aligned with package and Stage 0 baseline'
+      : compatibilityChecks.join('; ')
+  );
+
+  const offlineRequirements = [
+    /Offline fallback installation/,
+    /npm pack @ramuks22\/ai-agent-governance@<VERSION>/,
+    /npx ai-governance init/,
+  ];
+  const missingOffline = offlineRequirements.filter((pattern) => !pattern.test(policy));
+  add(
+    'maintenance.offline-guidance',
+    missingOffline.length === 0,
+    missingOffline.length === 0
+      ? 'offline install guidance present'
+      : 'offline install guidance is missing required command examples'
+  );
+
+  const hasDeprecationContract = /Deprecation handling in Stage 8 is process-only \(docs\/changelog\/tracker\), not runtime warning logic\./.test(policy);
+  add(
+    'maintenance.deprecation-contract',
+    hasDeprecationContract,
+    hasDeprecationContract
+      ? 'deprecation workflow includes Stage 8 no-runtime-warning contract'
+      : 'missing Stage 8 no-runtime-warning contract line in deprecation workflow'
+  );
+
+  return checks;
+}
+
+function evaluateReleaseDistributionChecks() {
+  const checks = [];
+  const add = (name, ok, detail) => checks.push({ name, ok, detail });
+  const rootPackage = loadJson(targetPath('package.json'), 'package metadata');
+  const templatePackageAbs = targetPath(TEMPLATE_PACKAGE_PATH);
+
+  if (!existsSync(templatePackageAbs)) {
+    add('distribution.template-package', false, `missing ${TEMPLATE_PACKAGE_PATH}`);
+    return checks;
+  }
+
+  const templatePackage = loadJson(templatePackageAbs, 'template package metadata');
+  const expectedVersion = rootPackage.version;
+  const pinnedVersion = templatePackage.devDependencies?.[PACKAGE_NAME];
+  add(
+    'distribution.template-pin',
+    pinnedVersion === expectedVersion,
+    pinnedVersion === expectedVersion
+      ? `template dependency pinned to ${expectedVersion}`
+      : `expected ${PACKAGE_NAME}@${expectedVersion}, found ${pinnedVersion || 'missing'}`
+  );
+
+  const scripts = templatePackage.scripts || {};
+  const requiredScripts = ['governance:init', 'governance:check', 'governance:doctor', 'governance:bootstrap'];
+  const missingScripts = requiredScripts.filter((name) => typeof scripts[name] !== 'string' || scripts[name].trim() === '');
+  const bootstrap = scripts['governance:bootstrap'] || '';
+  const bootstrapValid = /governance:init/.test(bootstrap)
+    && /governance:check/.test(bootstrap)
+    && /governance:doctor/.test(bootstrap);
+  add(
+    'distribution.template-scripts',
+    missingScripts.length === 0 && bootstrapValid,
+    missingScripts.length === 0 && bootstrapValid
+      ? 'template governance script contract valid'
+      : `missing scripts: ${missingScripts.join(', ') || 'none'}; bootstrap must chain init/check/doctor`
+  );
+
+  const pinSensitiveFiles = [
+    'docs/development/greenfield-template-publication-runbook.md',
+    '.github/workflows/governance-ci-reusable.yml',
+    RELEASE_POLICY_PATH,
+  ];
+  const floatingRefIssues = [];
+  for (const relPath of pinSensitiveFiles) {
+    const absPath = targetPath(relPath);
+    if (!existsSync(absPath)) {
+      floatingRefIssues.push(`${relPath} (missing)`);
+      continue;
+    }
+    const content = readFileSync(absPath, 'utf8');
+    if (/@main\b|@latest\b/.test(content)) {
+      floatingRefIssues.push(`${relPath} (contains floating ref @main or @latest)`);
+    }
+  }
+  add(
+    'distribution.no-floating-refs',
+    floatingRefIssues.length === 0,
+    floatingRefIssues.length === 0
+      ? 'distribution guidance avoids floating refs in pinned contexts'
+      : floatingRefIssues.join('; ')
+  );
+
+  const packResult = runCommand('npm', ['pack', '--dry-run']);
+  add(
+    'distribution.pack-dry-run',
+    packResult.ok,
+    packResult.ok
+      ? 'npm pack --dry-run succeeded'
+      : `npm pack --dry-run failed: ${(packResult.stderr || packResult.stdout || 'unknown error')}`
+  );
+
+  return checks;
+}
+
+function runReleaseCheck(options) {
+  const selectedScopes = options.releaseScope === 'all'
+    ? ['maintenance', 'distribution']
+    : [options.releaseScope];
+  const checks = [];
+  for (const scope of selectedScopes) {
+    if (scope === 'maintenance') {
+      checks.push(...evaluateReleaseMaintenanceChecks());
+    } else if (scope === 'distribution') {
+      checks.push(...evaluateReleaseDistributionChecks());
+    }
+  }
+
+  let hasFailure = false;
+  for (const check of checks) {
+    const status = check.ok ? 'PASS' : 'FAIL';
+    info(`[governance:release-check] ${status} ${check.name}: ${check.detail}`);
+    if (!check.ok) hasFailure = true;
+  }
+
+  if (hasFailure) {
+    process.exit(1);
+  }
+
+  info(`[governance:release-check] PASS (scope=${options.releaseScope})`);
+}
+
 function collectSupportedCiFiles() {
   const files = [];
   const githubWorkflowsDir = targetPath(path.join('.github', 'workflows'));
@@ -2042,6 +2261,11 @@ async function main() {
 
   if (options.mode === 'ci-check') {
     runCiCheck(options);
+    process.exit(0);
+  }
+
+  if (options.mode === 'release-check') {
+    runReleaseCheck(options);
     process.exit(0);
   }
 

@@ -14,6 +14,7 @@ Commands:
   init      Initialize governance artifacts and hooks
   check     Validate governance setup
   ci-check  Run configured governance gates for CI parity
+  release-check  Run release maintenance and distribution preflight checks
   doctor    Print detailed governance diagnostics
   upgrade   Upgrade managed governance artifacts safely
   adopt     Analyze/adopt existing repos into managed governance artifacts
@@ -25,6 +26,7 @@ Examples:
   npx @ramuks22/ai-agent-governance init --wizard --hook-strategy auto
   npx @ramuks22/ai-agent-governance check
   npx @ramuks22/ai-agent-governance ci-check --gate all
+  npx @ramuks22/ai-agent-governance release-check --scope all
   npx @ramuks22/ai-agent-governance doctor
   npx @ramuks22/ai-agent-governance upgrade --dry-run
   npx @ramuks22/ai-agent-governance adopt --report .governance/adopt-report.md
@@ -51,6 +53,7 @@ if (!command || command === 'help' || command === '--help' || command === '-h') 
 if (command === 'init') runCheckScript(['--init', ...rest]);
 if (command === 'check') runCheckScript(rest);
 if (command === 'ci-check') runCheckScript(['--ci-check', ...rest]);
+if (command === 'release-check') runCheckScript(['--release-check', ...rest]);
 if (command === 'doctor') runCheckScript(['--doctor', ...rest]);
 if (command === 'upgrade') runCheckScript(['--upgrade', ...rest]);
 if (command === 'adopt') runCheckScript(['--adopt', ...rest]);
