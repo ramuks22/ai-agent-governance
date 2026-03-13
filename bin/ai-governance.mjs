@@ -32,6 +32,7 @@ Examples:
   npx @ramuks22/ai-agent-governance doctor
   npx @ramuks22/ai-agent-governance upgrade --dry-run
   npx @ramuks22/ai-agent-governance adopt --report .governance/adopt-report.md
+  npx @ramuks22/ai-agent-governance adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md
   npx @ramuks22/ai-agent-governance rollback --to latest --force
 `);
 }

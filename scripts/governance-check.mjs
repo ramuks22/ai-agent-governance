@@ -491,6 +491,7 @@ function parseArgs(argv) {
   const isCI = process.env.CI === 'true';
   let presetProvided = false;
   let hookStrategyProvided = false;
+  let trackerPathProvided = false;
   let gateProvided = false;
   let scopeProvided = false;
   let applyProvided = false;
@@ -517,6 +518,8 @@ function parseArgs(argv) {
     wizard: false,
     hookStrategy: 'auto',
     hookStrategyProvided: false,
+    trackerPath: '',
+    trackerPathProvided: false,
     configPath: process.env.GOVERNANCE_CONFIG || CONFIG_PATH,
     ciGate: 'all',
     releaseScope: 'all',
@@ -565,6 +568,13 @@ function parseArgs(argv) {
     } else if (arg.startsWith('--hook-strategy=')) {
       options.hookStrategy = arg.split('=')[1];
       hookStrategyProvided = true;
+    } else if (arg === '--tracker-path' && argv[i + 1]) {
+      options.trackerPath = argv[i + 1];
+      trackerPathProvided = true;
+      i += 1;
+    } else if (arg.startsWith('--tracker-path=')) {
+      options.trackerPath = arg.split('=')[1];
+      trackerPathProvided = true;
     } else if (arg === '--report' && argv[i + 1]) {
       reportValue = argv[i + 1];
       reportProvided = true;
@@ -618,6 +628,7 @@ function parseArgs(argv) {
 
   options.presetProvided = presetProvided;
   options.hookStrategyProvided = hookStrategyProvided;
+  options.trackerPathProvided = trackerPathProvided;
 
   if (!PRESETS[options.preset]) {
     fail(`✖ Invalid preset '${options.preset}'. Allowed: ${PRESET_NAMES.join(', ')}`);
@@ -653,6 +664,14 @@ function parseArgs(argv) {
 
   if (options.mode === 'adopt' && options.wizard) {
     fail('✖ --wizard is not supported with --adopt.');
+  }
+
+  if (options.mode !== 'adopt' && trackerPathProvided) {
+    fail('✖ --tracker-path is only supported with --adopt.');
+  }
+
+  if (options.mode === 'adopt' && trackerPathProvided && !String(options.trackerPath || '').trim()) {
+    fail('✖ --tracker-path requires a non-empty repository path for --adopt.');
   }
 
   if (options.mode === 'adopt' && reportProvided) {
@@ -722,6 +741,7 @@ Options:
   --preset <name>       Preset config: node-npm-cjs|node-npm-esm|node-pnpm-monorepo|node-yarn-workspaces|generic
   --wizard              Interactive preset selection for init (mutually exclusive with --preset)
   --hook-strategy <s>   Hook install strategy: auto|core-hooks|git-hooks
+  --tracker-path <path> Existing tracker file to use during --adopt when tracker mapping is custom or ambiguous
   --dry-run             Print planned actions without writing files
   --apply               Write managed changes during --adopt or execute publish/tag steps during --release-publish
   --force               Overwrite conflicts or bypass rollback clean-tree check
@@ -745,6 +765,7 @@ Examples:
   node scripts/governance-check.mjs --release-publish --apply --dist-tag next --tag v1.2.3
   node scripts/governance-check.mjs --upgrade --dry-run --patch
   node scripts/governance-check.mjs --adopt --report .governance/adopt-report.md
+  node scripts/governance-check.mjs --adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md
   node scripts/governance-check.mjs --adopt --apply --force --preset node-npm-cjs
   node scripts/governance-check.mjs --rollback --to latest --force
   node scripts/governance-check.mjs --doctor
@@ -842,7 +863,171 @@ function detectHookManagers() {
   };
 }
 
-function detectAdoptRepoProfile() {
+function normalizeRepoRelativePath(inputPath) {
+  return path.posix.normalize(String(inputPath || '').replace(/\\/g, '/'));
+}
+
+function resolveRepoPathInput(inputPath, optionName = 'path') {
+  const raw = String(inputPath || '').trim();
+  if (!raw) {
+    fail(`✖ ${optionName} requires a non-empty repository path.`);
+  }
+
+  const absolute = path.isAbsolute(raw)
+    ? path.resolve(raw)
+    : path.resolve(TARGET_ROOT, raw);
+  const relative = normalizeRepoRelativePath(path.relative(TARGET_ROOT, absolute));
+  if (!relative || relative === '.' || relative === '..' || relative.startsWith('../')) {
+    fail(`✖ ${optionName} must point to a file inside the repository: ${raw}`);
+  }
+
+  return relative;
+}
+
+function readConfiguredTrackerPath(configPath = CONFIG_PATH) {
+  const config = tryLoadJson(targetPath(configPath));
+  const trackerPath = config?.tracker?.path;
+  if (typeof trackerPath !== 'string' || !trackerPath.trim()) {
+    return '';
+  }
+  return normalizeRepoRelativePath(trackerPath.trim());
+}
+
+function listRepoFilesForDiscovery() {
+  if (isGitRepo()) {
+    const tracked = execText('git', ['ls-files']);
+    if (tracked) {
+      return [...new Set(
+        tracked
+          .split(/\r?\n/)
+          .map((line) => normalizeRepoRelativePath(line))
+          .filter(Boolean)
+      )].sort((a, b) => a.localeCompare(b));
+    }
+  }
+
+  const excludedDirs = new Set(['.git', 'node_modules', '.governance', 'dist', 'build', 'coverage']);
+  const files = [];
+  const walk = (relDir = '') => {
+    const absDir = relDir ? targetPath(relDir) : TARGET_ROOT;
+    for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+      if (excludedDirs.has(entry.name)) continue;
+      const relPath = relDir
+        ? path.posix.join(relDir, entry.name)
+        : normalizeRepoRelativePath(entry.name);
+      if (entry.isDirectory()) {
+        walk(relPath);
+      } else {
+        files.push(relPath);
+      }
+    }
+  };
+
+  walk();
+  return [...new Set(files)].sort((a, b) => a.localeCompare(b));
+}
+
+function discoverTrackerCandidates() {
+  const allowedExtensions = new Set(['.md', '.json', '.yml', '.yaml']);
+  return listRepoFilesForDiscovery()
+    .filter((relPath) => {
+      if (relPath === TRACKER_TEMPLATE_PATH || relPath.startsWith('docs/templates/')) {
+        return false;
+      }
+      const ext = path.posix.extname(relPath).toLowerCase();
+      if (!allowedExtensions.has(ext)) return false;
+      return relPath.toLowerCase().includes('tracker');
+    })
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function resolveAdoptTrackerState(options = {}) {
+  const trackerCandidates = discoverTrackerCandidates();
+  const nonCanonicalCandidates = trackerCandidates.filter((candidate) => candidate !== TRACKER_PATH);
+  const configuredTrackerPath = readConfiguredTrackerPath(options.configPath || CONFIG_PATH);
+  const canonicalExists = existsSync(targetPath(TRACKER_PATH));
+
+  if (options.trackerPathProvided) {
+    const trackerPath = resolveRepoPathInput(options.trackerPath, '--tracker-path');
+    const exists = trackerPath === TRACKER_PATH
+      ? existsSync(targetPath(TRACKER_PATH))
+      : existsSync(targetPath(trackerPath));
+    if (trackerPath !== TRACKER_PATH && !exists) {
+      fail(`✖ --tracker-path requires an existing file or ${TRACKER_PATH}: ${trackerPath}`);
+    }
+    return {
+      hasTracker: exists,
+      trackerStatus: trackerPath === TRACKER_PATH ? 'canonical' : 'custom',
+      trackerPath,
+      trackerCandidates: nonCanonicalCandidates,
+      blockers: [],
+    };
+  }
+
+  if (configuredTrackerPath) {
+    const exists = existsSync(targetPath(configuredTrackerPath));
+    if (exists) {
+      return {
+        hasTracker: true,
+        trackerStatus: 'configured',
+        trackerPath: configuredTrackerPath,
+        trackerCandidates: nonCanonicalCandidates,
+        blockers: [],
+      };
+    }
+    return {
+      hasTracker: false,
+      trackerStatus: 'configured-missing',
+      trackerPath: configuredTrackerPath,
+      trackerCandidates: nonCanonicalCandidates,
+      blockers: [
+        `Configured tracker path '${configuredTrackerPath}' is missing. Fix governance.config.json or pass --tracker-path <existing-file> to continue.`,
+      ],
+    };
+  }
+
+  if (canonicalExists) {
+    return {
+      hasTracker: true,
+      trackerStatus: 'canonical',
+      trackerPath: TRACKER_PATH,
+      trackerCandidates: nonCanonicalCandidates,
+      blockers: [],
+    };
+  }
+
+  if (nonCanonicalCandidates.length === 1) {
+    return {
+      hasTracker: true,
+      trackerStatus: 'custom',
+      trackerPath: nonCanonicalCandidates[0],
+      trackerCandidates: nonCanonicalCandidates,
+      blockers: [],
+    };
+  }
+
+  if (nonCanonicalCandidates.length > 1) {
+    return {
+      hasTracker: true,
+      trackerStatus: 'ambiguous',
+      trackerPath: '',
+      trackerCandidates: nonCanonicalCandidates,
+      blockers: [
+        `Multiple tracker candidates detected (${nonCanonicalCandidates.join(', ')}). Pass --tracker-path <path> to continue safely.`,
+      ],
+    };
+  }
+
+  return {
+    hasTracker: false,
+    trackerStatus: 'none',
+    trackerPath: '',
+    trackerCandidates: [],
+    blockers: [],
+  };
+}
+
+function detectAdoptRepoProfile(options = {}) {
   const packageJson = tryLoadJson(targetPath('package.json'));
   const packageManagerField = String(packageJson?.packageManager || '').toLowerCase();
   const hasPnpmWorkspace = existsSync(targetPath('pnpm-workspace.yaml'));
@@ -864,7 +1049,7 @@ function detectAdoptRepoProfile() {
   }
 
   let inferredPreset = null;
-  const blockers = [];
+  const inferenceBlockers = [];
   if (packageManager === 'npm' && layout === 'single-package') {
     inferredPreset = moduleType === 'esm' ? 'node-npm-esm' : 'node-npm-cjs';
   } else if (packageManager === 'pnpm' && layout === 'monorepo/workspaces') {
@@ -872,11 +1057,13 @@ function detectAdoptRepoProfile() {
   } else if (packageManager === 'yarn' && layout === 'monorepo/workspaces') {
     inferredPreset = 'node-yarn-workspaces';
   } else {
-    blockers.push(
+    inferenceBlockers.push(
       `Unsupported inferred stack (${packageManager} + ${layout}). ` +
       'Pass --preset explicitly (for example --preset generic) to continue.'
     );
   }
+
+  const trackerState = resolveAdoptTrackerState(options);
 
   return {
     packageManager,
@@ -884,10 +1071,14 @@ function detectAdoptRepoProfile() {
     moduleType,
     inferredPreset,
     inferredHookStrategy: 'auto',
-    blockers,
+    inferenceBlockers,
     hasManifest: existsSync(targetPath(MANIFEST_PATH)),
     hasGovernanceConfig: existsSync(targetPath(CONFIG_PATH)),
-    hasTracker: existsSync(targetPath(TRACKER_PATH)),
+    hasTracker: trackerState.hasTracker,
+    trackerStatus: trackerState.trackerStatus,
+    trackerPath: trackerState.trackerPath,
+    trackerCandidates: trackerState.trackerCandidates,
+    trackerBlockers: trackerState.blockers,
   };
 }
 
@@ -905,7 +1096,7 @@ function resolveAdoptRuntimeOptions(options, manifest, profile) {
   const hookStrategy = options.hookStrategyProvided
     ? options.hookStrategy
     : (manifest?.hookStrategy || profile.inferredHookStrategy);
-  const blockers = presetSource === 'inference' ? [...profile.blockers] : [];
+  const blockers = presetSource === 'inference' ? [...profile.inferenceBlockers] : [];
 
   if (!PRESETS[preset]) {
     blockers.push(`Resolved preset '${preset}' is not supported.`);
@@ -920,6 +1111,10 @@ function resolveAdoptRuntimeOptions(options, manifest, profile) {
     hookStrategy,
     presetSource,
     hookStrategySource,
+    trackerPath: profile.trackerPath,
+    trackerStatus: profile.trackerStatus,
+    trackerCandidates: profile.trackerCandidates,
+    trackerBlockers: [...profile.trackerBlockers],
     blockers,
   };
 }
@@ -932,6 +1127,14 @@ function hookScriptContent(type) {
     return `#!/bin/sh\nset -eu\n\nnode ./node_modules/${PACKAGE_NAME}/scripts/gates.mjs pre-push\n`;
   }
   return `#!/bin/sh\nset -eu\n\nnode ./node_modules/${PACKAGE_NAME}/scripts/commit-msg.mjs "$1"\n`;
+}
+
+function buildGeneratedConfigContent(preset, trackerPathOverride = '') {
+  const generated = JSON.parse(JSON.stringify(PRESETS[preset]));
+  if (trackerPathOverride) {
+    generated.tracker.path = trackerPathOverride;
+  }
+  return `${JSON.stringify(generated, null, 2)}\n`;
 }
 
 function collectManagedItems(options) {
@@ -948,23 +1151,27 @@ function collectManagedItems(options) {
     });
   }
 
-  files.push({
-    relPath: CONFIG_PATH,
-    source: 'generated',
-    content: `${JSON.stringify(PRESETS[options.preset], null, 2)}\n`,
-    stage: 'generate-config',
-    strategy: strategyForPath(CONFIG_PATH),
-  });
+  if (!options.skipGeneratedConfig) {
+    files.push({
+      relPath: CONFIG_PATH,
+      source: 'generated',
+      content: buildGeneratedConfigContent(options.preset, options.generatedTrackerPath),
+      stage: 'generate-config',
+      strategy: strategyForPath(CONFIG_PATH),
+    });
+  }
 
-  const trackerTemplate = readFileSync(sourcePath(TRACKER_TEMPLATE_PATH), 'utf8');
-  files.push({
-    relPath: TRACKER_PATH,
-    source: 'generated',
-    content: trackerTemplate,
-    stage: 'generate-tracker',
-    createOnly: true,
-    strategy: strategyForPath(TRACKER_PATH),
-  });
+  if (options.includeTrackerFile !== false) {
+    const trackerTemplate = readFileSync(sourcePath(TRACKER_TEMPLATE_PATH), 'utf8');
+    files.push({
+      relPath: TRACKER_PATH,
+      source: 'generated',
+      content: trackerTemplate,
+      stage: 'generate-tracker',
+      createOnly: true,
+      strategy: strategyForPath(TRACKER_PATH),
+    });
+  }
 
   if (options.hookStrategy !== 'git-hooks') {
     for (const name of ['pre-commit', 'pre-push', 'commit-msg']) {
@@ -1432,6 +1639,9 @@ function buildAdoptCommand(runtimeOptions, options = {}) {
     `--preset ${runtimeOptions.preset}`,
     `--hook-strategy ${runtimeOptions.hookStrategy}`,
   ];
+  if (runtimeOptions.trackerPathProvided && runtimeOptions.trackerPath) {
+    parts.push(`--tracker-path ${runtimeOptions.trackerPath}`);
+  }
   if (options.apply) parts.push('--apply');
   if (options.force) parts.push('--force');
   if (options.reportPath) parts.push(`--report ${options.reportPath}`);
@@ -1466,6 +1676,9 @@ function formatAdoptReport({
     `- hasManifest: ${profile.hasManifest}`,
     `- hasGovernanceConfig: ${profile.hasGovernanceConfig}`,
     `- hasTracker: ${profile.hasTracker}`,
+    `- trackerStatus: ${profile.trackerStatus}`,
+    `- trackerPath: ${profile.trackerPath || 'none'}`,
+    `- trackerCandidates: ${profile.trackerCandidates.length ? profile.trackerCandidates.join(', ') : 'none'}`,
     `- selectedPreset: ${runtimeOptions.preset} (source=${runtimeOptions.presetSource})`,
     `- selectedHookStrategy: ${runtimeOptions.hookStrategy} (source=${runtimeOptions.hookStrategySource})`,
     '',
@@ -1499,11 +1712,16 @@ function formatAdoptReport({
 
 function runAdopt(options) {
   const manifest = readManifest();
-  const profile = detectAdoptRepoProfile();
+  const profile = detectAdoptRepoProfile(options);
   const runtimeOptions = resolveAdoptRuntimeOptions(options, manifest, profile);
   const forceEnabled = runtimeOptions.apply && runtimeOptions.force;
   const conflictState = detectHookManagers();
-  const managedEntries = collectManagedItems(runtimeOptions);
+  const managedEntries = collectManagedItems({
+    ...runtimeOptions,
+    generatedTrackerPath: runtimeOptions.trackerPath || '',
+    includeTrackerFile: runtimeOptions.trackerPath === TRACKER_PATH || runtimeOptions.trackerStatus === 'none',
+    skipGeneratedConfig: runtimeOptions.trackerBlockers.length > 0,
+  });
   const actions = [];
   const conflicts = [];
 
@@ -1549,7 +1767,7 @@ function runAdopt(options) {
     packageVersion()
   );
 
-  const reportBlockers = [...runtimeOptions.blockers, ...softBlockers];
+  const reportBlockers = [...runtimeOptions.blockers, ...runtimeOptions.trackerBlockers, ...softBlockers];
   const report = formatAdoptReport({
     reportPath,
     patchPath,
@@ -1579,8 +1797,8 @@ function runAdopt(options) {
   }
 
   const applyBlockers = forceEnabled
-    ? [...runtimeOptions.blockers]
-    : [...runtimeOptions.blockers, ...softBlockers];
+    ? [...runtimeOptions.blockers, ...runtimeOptions.trackerBlockers]
+    : [...runtimeOptions.blockers, ...runtimeOptions.trackerBlockers, ...softBlockers];
   if (applyBlockers.length) {
     failBlocked(`✖ adopt apply blocked. Review ${reportPath} and resolve blockers.`);
   }
@@ -1732,10 +1950,13 @@ function runUpgrade(options) {
     fail('✖ Missing .governance/manifest.json. Run: npx @ramuks22/ai-agent-governance init');
   }
 
+  const preservedTrackerPath = readConfiguredTrackerPath(options.configPath || CONFIG_PATH);
   const runtimeOptions = {
     ...options,
     preset: manifest.preset || options.preset,
     hookStrategy: manifest.hookStrategy || options.hookStrategy,
+    generatedTrackerPath: preservedTrackerPath || '',
+    includeTrackerFile: preservedTrackerPath ? preservedTrackerPath === TRACKER_PATH : true,
   };
 
   const managedEntries = collectManagedItems(runtimeOptions);

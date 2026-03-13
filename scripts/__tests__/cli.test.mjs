@@ -48,6 +48,32 @@ function commitAll(cwd, message = 'chore: commit') {
   assert.equal(commit.status, 0, commit.stderr);
 }
 
+function writeSampleGovernanceConfig(cwd, trackerPath) {
+  writeFileSync(
+    path.join(cwd, 'governance.config.json'),
+    `${JSON.stringify({
+      configVersion: '1.0',
+      tracker: {
+        path: trackerPath,
+        idPattern: '^[A-Z]+-[A-Z]+-\\d{3}$',
+        allowedPrefixes: ['AG'],
+      },
+      gates: {
+        preCommit: ['npm run -s governance:check', 'npm run -s format:check', 'npm run -s lint'],
+        prePush: ['npm run -s governance:check', 'npm run -s test', 'npm run -s build'],
+      },
+      branchProtection: {
+        blockDirectPush: ['main', 'master'],
+        branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
+      },
+      node: {
+        minVersion: '20.0.0',
+      },
+    }, null, 2)}\n`,
+    'utf8'
+  );
+}
+
 test('CLI help displays commands', () => {
   const result = run(['--help'], process.cwd());
   assert.equal(result.status, 0);
@@ -377,6 +403,48 @@ test('adopt report-only writes report and patch without managed-file mutations',
   assert.equal(existsSync(path.join(repo, '.governance', 'manifest.json')), false);
 });
 
+test('adopt blocks ambiguous tracker mapping without planning canonical tracker writes', () => {
+  const repo = setupRepo('gov-cli-adopt-ambiguous-tracker');
+  mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(path.join(repo, 'docs', 'client-side-production-gap-tracker.md'), '# Tracker\n', 'utf8');
+  writeFileSync(path.join(repo, 'docs', 'tracker.json'), '{}\n', 'utf8');
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  const patch = readFileSync(path.join(repo, '.governance', 'patches', 'adopt.patch'), 'utf8');
+  assert.match(report, /hasTracker: true/);
+  assert.match(report, /trackerStatus: ambiguous/);
+  assert.match(report, /trackerCandidates: docs\/client-side-production-gap-tracker\.md, docs\/tracker\.json/);
+  assert.doesNotMatch(report, /\|\s+(create|update|conflict)\s+\|\s+docs\/tracker\.md\s+\|/);
+  assert.doesNotMatch(report, /\|\s+(create|update|conflict)\s+\|\s+governance\.config\.json\s+\|/);
+  assert.doesNotMatch(patch, /## docs\/tracker\.md/);
+  assert.doesNotMatch(patch, /## governance\.config\.json/);
+});
+
+test('adopt blocks configured-missing tracker path without falling back to canonical tracker generation', () => {
+  const repo = setupRepo('gov-cli-adopt-configured-missing');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeSampleGovernanceConfig(repo, 'docs/missing-tracker.md');
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /hasTracker: false/);
+  assert.match(report, /trackerStatus: configured-missing/);
+  assert.match(report, /trackerPath: docs\/missing-tracker\.md/);
+  assert.doesNotMatch(report, /\|\s+(create|update|conflict)\s+\|\s+docs\/tracker\.md\s+\|/);
+});
+
 test('adopt returns exit code 2 for blocked unsupported inference', () => {
   const repo = setupRepo('gov-cli-adopt-blocked');
   writeFileSync(
@@ -403,6 +471,35 @@ test('adopt honors CLI preset override over unsupported inference', () => {
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
   assert.match(report, /selectedPreset: generic \(source=cli\)/);
+});
+
+test('adopt --tracker-path resolves custom tracker mapping and upgrade preserves tracker.path', () => {
+  const repo = setupRepo('gov-cli-adopt-custom-tracker-path');
+  mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(path.join(repo, 'docs', 'client-side-production-gap-tracker.md'), '# Tracker\n', 'utf8');
+  writeFileSync(path.join(repo, 'docs', 'tracker.json'), '{}\n', 'utf8');
+  commitAll(repo, 'chore: baseline custom tracker');
+
+  const adopt = run(['adopt', '--tracker-path', 'docs/tracker.json', '--apply'], repo);
+  assert.equal(adopt.status, 0, `${adopt.stdout}\n${adopt.stderr}`);
+  const config = JSON.parse(readFileSync(path.join(repo, 'governance.config.json'), 'utf8'));
+  assert.equal(config.tracker.path, 'docs/tracker.json');
+  assert.equal(existsSync(path.join(repo, 'docs', 'tracker.md')), false);
+
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /trackerStatus: custom/);
+  assert.match(report, /trackerPath: docs\/tracker\.json/);
+
+  const upgrade = run(['upgrade', '--dry-run'], repo);
+  assert.equal(upgrade.status, 0, `${upgrade.stdout}\n${upgrade.stderr}`);
+  assert.doesNotMatch(upgrade.stdout, /docs\/tracker\.md/);
+  const configAfterUpgrade = JSON.parse(readFileSync(path.join(repo, 'governance.config.json'), 'utf8'));
+  assert.equal(configAfterUpgrade.tracker.path, 'docs/tracker.json');
 });
 
 test('adopt report-only keeps blockers visible even when --force is provided', () => {
@@ -439,7 +536,38 @@ test('adopt --apply blocks on dirty tree unless --force, and force path records 
   assert.match(forced.stdout, /Rollback: npx @ramuks22\/ai-agent-governance rollback --to/);
 });
 
-test('--apply and --report are rejected outside adopt mode', () => {
+test('adopt rejects missing non-canonical --tracker-path values with actionable error', () => {
+  const repo = setupRepo('gov-cli-adopt-invalid-tracker-path');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+
+  const result = run(['adopt', '--tracker-path', 'docs/missing-tracker.json'], repo);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /--tracker-path requires an existing file or docs\/tracker\.md/);
+});
+
+test('adopt recognizes canonical tracker repos without blocking', () => {
+  const repo = setupRepo('gov-cli-adopt-canonical-tracker');
+  mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(path.join(repo, 'docs', 'tracker.md'), '# Tracker\n', 'utf8');
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /hasTracker: true/);
+  assert.match(report, /trackerStatus: canonical/);
+  assert.match(report, /trackerPath: docs\/tracker\.md/);
+});
+
+test('--apply, --report, and --tracker-path are rejected outside adopt mode', () => {
   const repo = setupRepo('gov-cli-adopt-flag-guard');
   writeFileSync(
     path.join(repo, 'package.json'),
@@ -454,6 +582,10 @@ test('--apply and --report are rejected outside adopt mode', () => {
   const reportInvalid = run(['check', '--report', 'tmp.md'], repo);
   assert.notEqual(reportInvalid.status, 0);
   assert.match(reportInvalid.stderr, /--report is only supported with --adopt or --release-check/);
+
+  const trackerPathInvalid = run(['check', '--tracker-path', 'docs/tracker.json'], repo);
+  assert.notEqual(trackerPathInvalid.status, 0);
+  assert.match(trackerPathInvalid.stderr, /--tracker-path is only supported with --adopt/);
 });
 
 test('upgrade dry-run can emit deterministic patch output', () => {
