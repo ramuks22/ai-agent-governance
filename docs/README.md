@@ -17,6 +17,7 @@ Package-first commands:
 - `npx @ramuks22/ai-agent-governance doctor`
 - `npx @ramuks22/ai-agent-governance upgrade`
 - `npx @ramuks22/ai-agent-governance adopt`
+- `npx @ramuks22/ai-agent-governance adopt --tracker-path docs/custom-tracker.json`
 - `npx @ramuks22/ai-agent-governance adopt --apply --force`
 - `npx @ramuks22/ai-agent-governance rollback`
 
@@ -26,6 +27,7 @@ Onboarding split:
 
 - Greenfield repos: scaffold from `templates/greenfield` (degit or GitHub Template), then run `npm run governance:bootstrap` (`degit` users run `git init` first).
 - Existing repos: use Stage 6 migration (`adopt`) commands.
+- Existing repos with custom or ambiguous tracker layouts: pass `--tracker-path <path>` so `adopt` preserves the current tracker instead of planning canonical `docs/tracker.md`.
 
 ## Source of Truth
 

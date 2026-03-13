@@ -104,6 +104,7 @@ Manual publication and update process for GitHub Template distribution:
 
 ```bash
 npx @ramuks22/ai-agent-governance adopt --report .governance/adopt-report.md
+npx @ramuks22/ai-agent-governance adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md
 npx @ramuks22/ai-agent-governance adopt --apply
 ```
 
@@ -396,6 +397,7 @@ CLI equivalent (package mode):
 - `adopt` is report-first by default and writes `.governance/adopt-report.md` plus `.governance/patches/adopt.patch`.
 - `adopt --apply` writes managed artifacts only when blockers are resolved; blocked migrations exit with code `2`.
 - `adopt --apply --force` can bypass managed-file and dirty-tree blockers and prints rollback guidance.
+- `adopt --tracker-path <path>` lets you keep an existing custom tracker file instead of defaulting to canonical `docs/tracker.md`.
 - `rollback` restores files from `.governance/backups/index.json` (latest by default or `--to <backup-id>`).
 - Managed-block strategy applies to `.md/.yml/.yaml/.sh` and hook files; `.json` remains full-file checksum-managed.
 
@@ -403,6 +405,10 @@ CLI equivalent (package mode):
 
 - Exit `2`: migration blockers detected (unsupported inferred stack, managed-file conflicts, or dirty tree for apply mode).
 - Use explicit overrides when inference is ambiguous: `--preset <name>` and `--hook-strategy <auto|core-hooks|git-hooks>`.
+- If the report shows `trackerStatus: custom`, `configured`, `configured-missing`, or `ambiguous`, review `trackerPath` / `trackerCandidates` before applying changes.
+- When an existing repo already has a tracker system, `adopt` will not create `docs/tracker.md` unless canonical tracker mapping is explicitly selected.
+- Resolve ambiguous tracker detection with an explicit override:
+  - `npx @ramuks22/ai-agent-governance adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md`
 - Review the generated report and patch before write operations:
   - `.governance/adopt-report.md`
   - `.governance/patches/adopt.patch`
