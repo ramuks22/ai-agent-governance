@@ -941,6 +941,52 @@ function discoverTrackerCandidates() {
     .sort((a, b) => a.localeCompare(b));
 }
 
+function discoverPackageRoots() {
+  return listRepoFilesForDiscovery()
+    .filter((relPath) => path.posix.basename(relPath) === 'package.json')
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function quotedDirectoryPattern(directory) {
+  const escaped = escapeRegex(directory);
+  return `(?:${escaped}|"${escaped}"|'${escaped}')`;
+}
+
+function scriptReferencesOperationalPackage(scriptText, directory) {
+  if (!scriptText || !directory || directory === '.') {
+    return false;
+  }
+
+  const directoryPattern = quotedDirectoryPattern(directory);
+  const toolPattern = new RegExp(`(?:npm|npx)\\b[^\\n\\r]*?(?:--prefix(?:=|\\s+)|-C\\s+)${directoryPattern}(?=\\s|$)`);
+  const cdPattern = new RegExp(`(?:^|[;&(]\\s*)cd\\s+${directoryPattern}\\s*&&`);
+  return toolPattern.test(scriptText) || cdPattern.test(scriptText);
+}
+
+function discoverOperationalPackageRoots(rootPackageJson, packageManager, baseLayout, packageRoots) {
+  if (packageManager !== 'npm' || baseLayout !== 'single-package') {
+    return [];
+  }
+
+  const rootScripts = Object.values(rootPackageJson?.scripts || {})
+    .filter((value) => typeof value === 'string' && value.trim());
+  if (rootScripts.length === 0) {
+    return [];
+  }
+
+  return packageRoots
+    .filter((packageRoot) => packageRoot !== 'package.json')
+    .filter((packageRoot) => {
+      const directory = path.posix.dirname(packageRoot);
+      return rootScripts.some((scriptText) => scriptReferencesOperationalPackage(scriptText, directory));
+    })
+    .sort((a, b) => a.localeCompare(b));
+}
+
 function resolveAdoptTrackerState(options = {}) {
   const trackerCandidates = discoverTrackerCandidates();
   const nonCanonicalCandidates = trackerCandidates.filter((candidate) => candidate !== TRACKER_PATH);
@@ -1035,9 +1081,9 @@ function detectAdoptRepoProfile(options = {}) {
   const hasYarnLock = existsSync(targetPath('yarn.lock'));
   const hasNpmLock = existsSync(targetPath('package-lock.json'));
   const hasWorkspaces = Array.isArray(packageJson?.workspaces) || typeof packageJson?.workspaces === 'object' || hasPnpmWorkspace;
-
-  const layout = hasWorkspaces ? 'monorepo/workspaces' : 'single-package';
+  const baseLayout = hasWorkspaces ? 'monorepo/workspaces' : 'single-package';
   const moduleType = packageJson?.type === 'module' ? 'esm' : 'cjs';
+  const packageRoots = discoverPackageRoots();
 
   let packageManager = 'npm';
   if (packageManagerField.startsWith('pnpm@') || hasPnpmWorkspace || hasPnpmLock) {
@@ -1048,17 +1094,30 @@ function detectAdoptRepoProfile(options = {}) {
     packageManager = 'npm';
   }
 
+  const operationalPackageRoots = discoverOperationalPackageRoots(packageJson, packageManager, baseLayout, packageRoots);
+  let layout = baseLayout;
   let inferredPreset = null;
+  let inferenceStatus = 'unsupported';
   const inferenceBlockers = [];
-  if (packageManager === 'npm' && layout === 'single-package') {
+  if (packageManager === 'npm' && baseLayout === 'single-package' && operationalPackageRoots.length > 0) {
+    layout = 'hybrid';
+    inferenceStatus = 'ambiguous';
+    inferenceBlockers.push(
+      `Operational nested package roots detected (${operationalPackageRoots.join(', ')}). ` +
+      'Pass --preset explicitly (for example --preset generic) to continue.'
+    );
+  } else if (packageManager === 'npm' && baseLayout === 'single-package') {
     inferredPreset = moduleType === 'esm' ? 'node-npm-esm' : 'node-npm-cjs';
-  } else if (packageManager === 'pnpm' && layout === 'monorepo/workspaces') {
+    inferenceStatus = 'confident';
+  } else if (packageManager === 'pnpm' && baseLayout === 'monorepo/workspaces') {
     inferredPreset = 'node-pnpm-monorepo';
-  } else if (packageManager === 'yarn' && layout === 'monorepo/workspaces') {
+    inferenceStatus = 'confident';
+  } else if (packageManager === 'yarn' && baseLayout === 'monorepo/workspaces') {
     inferredPreset = 'node-yarn-workspaces';
+    inferenceStatus = 'confident';
   } else {
     inferenceBlockers.push(
-      `Unsupported inferred stack (${packageManager} + ${layout}). ` +
+      `Unsupported inferred stack (${packageManager} + ${baseLayout}). ` +
       'Pass --preset explicitly (for example --preset generic) to continue.'
     );
   }
@@ -1069,9 +1128,12 @@ function detectAdoptRepoProfile(options = {}) {
     packageManager,
     layout,
     moduleType,
+    inferenceStatus,
     inferredPreset,
     inferredHookStrategy: 'auto',
     inferenceBlockers,
+    packageRoots,
+    operationalPackageRoots,
     hasManifest: existsSync(targetPath(MANIFEST_PATH)),
     hasGovernanceConfig: existsSync(targetPath(CONFIG_PATH)),
     hasTracker: trackerState.hasTracker,
@@ -1083,22 +1145,31 @@ function detectAdoptRepoProfile(options = {}) {
 }
 
 function resolveAdoptRuntimeOptions(options, manifest, profile) {
-  const presetSource = options.presetProvided
+  let presetSource = options.presetProvided
     ? 'cli'
     : (manifest?.preset ? 'manifest' : 'inference');
   const hookStrategySource = options.hookStrategyProvided
     ? 'cli'
     : (manifest?.hookStrategy ? 'manifest' : 'inference');
 
-  const preset = options.presetProvided
-    ? options.preset
-    : (manifest?.preset || profile.inferredPreset || 'generic');
+  let preset = null;
+  if (options.presetProvided) {
+    preset = options.preset;
+  } else if (manifest?.preset) {
+    preset = manifest.preset;
+  } else if (profile.inferenceStatus === 'ambiguous') {
+    presetSource = 'unresolved';
+  } else {
+    preset = profile.inferredPreset || 'generic';
+  }
   const hookStrategy = options.hookStrategyProvided
     ? options.hookStrategy
     : (manifest?.hookStrategy || profile.inferredHookStrategy);
-  const blockers = presetSource === 'inference' ? [...profile.inferenceBlockers] : [];
+  const blockers = ['inference', 'unresolved'].includes(presetSource)
+    ? [...profile.inferenceBlockers]
+    : [];
 
-  if (!PRESETS[preset]) {
+  if (preset && !PRESETS[preset]) {
     blockers.push(`Resolved preset '${preset}' is not supported.`);
   }
   if (!['auto', 'core-hooks', 'git-hooks'].includes(hookStrategy)) {
@@ -1149,6 +1220,10 @@ function collectManagedItems(options) {
       stage: 'copy-artifact',
       strategy: strategyForPath(relPath),
     });
+  }
+
+  if (options.skipGeneratedWrites) {
+    return files;
   }
 
   if (!options.skipGeneratedConfig) {
@@ -1634,11 +1709,12 @@ function resolveAdoptPatchPath() {
 }
 
 function buildAdoptCommand(runtimeOptions, options = {}) {
-  const parts = [
-    'npx @ramuks22/ai-agent-governance adopt',
-    `--preset ${runtimeOptions.preset}`,
-    `--hook-strategy ${runtimeOptions.hookStrategy}`,
-  ];
+  const preset = options.presetOverride ?? runtimeOptions.preset;
+  const parts = ['npx @ramuks22/ai-agent-governance adopt'];
+  if (preset) {
+    parts.push(`--preset ${preset}`);
+  }
+  parts.push(`--hook-strategy ${runtimeOptions.hookStrategy}`);
   if (runtimeOptions.trackerPathProvided && runtimeOptions.trackerPath) {
     parts.push(`--tracker-path ${runtimeOptions.trackerPath}`);
   }
@@ -1646,6 +1722,13 @@ function buildAdoptCommand(runtimeOptions, options = {}) {
   if (options.force) parts.push('--force');
   if (options.reportPath) parts.push(`--report ${options.reportPath}`);
   return parts.join(' ');
+}
+
+function formatAdoptSelectedPreset(runtimeOptions) {
+  if (!runtimeOptions.preset && runtimeOptions.presetSource === 'unresolved') {
+    return 'none (explicit --preset required)';
+  }
+  return `${runtimeOptions.preset} (source=${runtimeOptions.presetSource})`;
 }
 
 function formatAdoptReport({
@@ -1670,7 +1753,10 @@ function formatAdoptReport({
     '',
     `- packageManager: ${profile.packageManager}`,
     `- layout: ${profile.layout}`,
+    `- inferenceStatus: ${profile.inferenceStatus}`,
     `- moduleType: ${profile.moduleType}`,
+    `- packageRoots: ${profile.packageRoots.length ? profile.packageRoots.join(', ') : 'none'}`,
+    `- operationalPackageRoots: ${profile.operationalPackageRoots.length ? profile.operationalPackageRoots.join(', ') : 'none'}`,
     `- inferredPreset: ${profile.inferredPreset || 'none'}`,
     `- inferredHookStrategy: ${profile.inferredHookStrategy}`,
     `- hasManifest: ${profile.hasManifest}`,
@@ -1679,7 +1765,7 @@ function formatAdoptReport({
     `- trackerStatus: ${profile.trackerStatus}`,
     `- trackerPath: ${profile.trackerPath || 'none'}`,
     `- trackerCandidates: ${profile.trackerCandidates.length ? profile.trackerCandidates.join(', ') : 'none'}`,
-    `- selectedPreset: ${runtimeOptions.preset} (source=${runtimeOptions.presetSource})`,
+    `- selectedPreset: ${formatAdoptSelectedPreset(runtimeOptions)}`,
     `- selectedHookStrategy: ${runtimeOptions.hookStrategy} (source=${runtimeOptions.hookStrategySource})`,
     '',
     '## Blockers',
@@ -1695,9 +1781,15 @@ function formatAdoptReport({
   }
 
   lines.push('', '## Recommended Commands', '');
-  lines.push(`- Report-only: \`${buildAdoptCommand(runtimeOptions, { reportPath })}\``);
-  lines.push(`- Apply: \`${buildAdoptCommand(runtimeOptions, { apply: true })}\``);
-  lines.push(`- Apply (force): \`${buildAdoptCommand(runtimeOptions, { apply: true, force: true })}\``);
+  if (runtimeOptions.presetSource === 'unresolved') {
+    for (const preset of ['node-npm-esm', 'node-npm-cjs', 'generic']) {
+      lines.push(`- Report-only (${preset}): \`${buildAdoptCommand(runtimeOptions, { reportPath, presetOverride: preset })}\``);
+    }
+  } else {
+    lines.push(`- Report-only: \`${buildAdoptCommand(runtimeOptions, { reportPath })}\``);
+    lines.push(`- Apply: \`${buildAdoptCommand(runtimeOptions, { apply: true })}\``);
+    lines.push(`- Apply (force): \`${buildAdoptCommand(runtimeOptions, { apply: true, force: true })}\``);
+  }
 
   lines.push('', '## Planned Actions', '');
   lines.push('| Action | Path | Reason |');
@@ -1716,11 +1808,13 @@ function runAdopt(options) {
   const runtimeOptions = resolveAdoptRuntimeOptions(options, manifest, profile);
   const forceEnabled = runtimeOptions.apply && runtimeOptions.force;
   const conflictState = detectHookManagers();
+  const skipGeneratedWrites = runtimeOptions.trackerBlockers.length > 0 || runtimeOptions.presetSource === 'unresolved';
   const managedEntries = collectManagedItems({
     ...runtimeOptions,
     generatedTrackerPath: runtimeOptions.trackerPath || '',
     includeTrackerFile: runtimeOptions.trackerPath === TRACKER_PATH || runtimeOptions.trackerStatus === 'none',
-    skipGeneratedConfig: runtimeOptions.trackerBlockers.length > 0,
+    skipGeneratedConfig: skipGeneratedWrites,
+    skipGeneratedWrites,
   });
   const actions = [];
   const conflicts = [];
