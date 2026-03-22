@@ -74,6 +74,29 @@ function writeSampleGovernanceConfig(cwd, trackerPath) {
   );
 }
 
+function writeJsonFile(cwd, relPath, value) {
+  const filePath = path.join(cwd, relPath);
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+function setupHybridNpmRepo(name, scripts, nestedPackageRoots = ['backend/package.json']) {
+  const repo = setupRepo(name);
+  writeJsonFile(repo, 'package.json', {
+    name: 'sample',
+    version: '1.0.0',
+    type: 'module',
+    scripts,
+  });
+  for (const nestedPath of nestedPackageRoots) {
+    writeJsonFile(repo, nestedPath, {
+      name: path.posix.basename(path.posix.dirname(nestedPath)),
+      version: '1.0.0',
+    });
+  }
+  return repo;
+}
+
 test('CLI help displays commands', () => {
   const result = run(['--help'], process.cwd());
   assert.equal(result.status, 0);
@@ -565,6 +588,127 @@ test('adopt recognizes canonical tracker repos without blocking', () => {
   assert.match(report, /hasTracker: true/);
   assert.match(report, /trackerStatus: canonical/);
   assert.match(report, /trackerPath: docs\/tracker\.md/);
+});
+
+for (const [suffix, scriptCommand] of [
+  ['prefix', 'npm --prefix backend run build'],
+  ['dash-c', 'npm -C backend run build'],
+  ['npx-prefix', 'npx --prefix backend vite build'],
+  ['subshell', '(cd backend && npm run build)'],
+]) {
+  test(`adopt blocks hybrid npm inference for ${suffix} operational package pattern`, () => {
+    const repo = setupHybridNpmRepo(`gov-cli-adopt-hybrid-${suffix}`, {
+      build: scriptCommand,
+    });
+
+    const result = run(['adopt'], repo);
+    assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+    const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+    const patch = readFileSync(path.join(repo, '.governance', 'patches', 'adopt.patch'), 'utf8');
+    assert.match(report, /layout: hybrid/);
+    assert.match(report, /inferenceStatus: ambiguous/);
+    assert.match(report, /packageRoots: backend\/package\.json, package\.json/);
+    assert.match(report, /operationalPackageRoots: backend\/package\.json/);
+    assert.match(report, /inferredPreset: none/);
+    assert.match(report, /selectedPreset: none \(explicit --preset required\)/);
+    assert.match(report, /Report-only \(node-npm-esm\): `npx @ramuks22\/ai-agent-governance adopt --preset node-npm-esm --hook-strategy auto --report \.governance\/adopt-report\.md`/);
+    assert.match(report, /Report-only \(node-npm-cjs\): `npx @ramuks22\/ai-agent-governance adopt --preset node-npm-cjs --hook-strategy auto --report \.governance\/adopt-report\.md`/);
+    assert.match(report, /Report-only \(generic\): `npx @ramuks22\/ai-agent-governance adopt --preset generic --hook-strategy auto --report \.governance\/adopt-report\.md`/);
+    assert.doesNotMatch(report, /\|\s+(create|update|conflict)\s+\|\s+governance\.config\.json\s+\|/);
+    assert.doesNotMatch(report, /\|\s+(create|update|conflict)\s+\|\s+docs\/tracker\.md\s+\|/);
+    assert.doesNotMatch(report, /\|\s+(create|update|conflict)\s+\|\s+\.githooks\/pre-commit\s+\|/);
+    assert.doesNotMatch(patch, /## governance\.config\.json/);
+    assert.doesNotMatch(patch, /## docs\/tracker\.md/);
+    assert.doesNotMatch(patch, /## \.githooks\/pre-commit/);
+  });
+}
+
+test('adopt reports sorted operational package roots for multiple nested npm packages', () => {
+  const repo = setupHybridNpmRepo(
+    'gov-cli-adopt-hybrid-multi-root',
+    {
+      build: 'npm -C frontend run build && npm --prefix backend run test',
+    },
+    ['frontend/package.json', 'backend/package.json']
+  );
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /packageRoots: backend\/package\.json, frontend\/package\.json, package\.json/);
+  assert.match(report, /operationalPackageRoots: backend\/package\.json, frontend\/package\.json/);
+});
+
+test('adopt keeps current single-package inference when nested package is not operationally referenced', () => {
+  const repo = setupHybridNpmRepo(
+    'gov-cli-adopt-non-operational-nested-package',
+    {
+      build: 'npm run lint',
+    }
+  );
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /layout: single-package/);
+  assert.match(report, /inferenceStatus: confident/);
+  assert.match(report, /packageRoots: backend\/package\.json, package\.json/);
+  assert.match(report, /operationalPackageRoots: none/);
+  assert.match(report, /selectedPreset: node-npm-esm \(source=inference\)/);
+});
+
+test('adopt does not trigger hybrid blocking for non-npm repos with nested package.json files', () => {
+  const repo = setupRepo('gov-cli-adopt-non-npm-nested-packages');
+  writeJsonFile(repo, 'package.json', {
+    name: 'sample',
+    version: '1.0.0',
+    packageManager: 'pnpm@9.0.0',
+    workspaces: ['packages/*'],
+    scripts: {
+      build: 'pnpm -r build',
+    },
+  });
+  writeJsonFile(repo, 'backend/package.json', {
+    name: 'backend',
+    version: '1.0.0',
+  });
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /layout: monorepo\/workspaces/);
+  assert.match(report, /inferenceStatus: confident/);
+  assert.doesNotMatch(report, /layout: hybrid/);
+  assert.match(report, /selectedPreset: node-pnpm-monorepo \(source=inference\)/);
+});
+
+test('adopt explicit preset override unblocks hybrid npm repos', () => {
+  const repo = setupHybridNpmRepo('gov-cli-adopt-hybrid-cli-preset', {
+    build: 'npm --prefix backend run build',
+  });
+
+  const result = run(['adopt', '--preset', 'generic'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /layout: hybrid/);
+  assert.match(report, /inferenceStatus: ambiguous/);
+  assert.match(report, /selectedPreset: generic \(source=cli\)/);
+});
+
+test('adopt manifest preset unblocks hybrid npm repos', () => {
+  const repo = setupHybridNpmRepo('gov-cli-adopt-hybrid-manifest-preset', {
+    build: 'npm --prefix backend run build',
+  });
+
+  const init = run(['init', '--preset', 'generic', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /layout: hybrid/);
+  assert.match(report, /inferenceStatus: ambiguous/);
+  assert.match(report, /selectedPreset: generic \(source=manifest\)/);
 });
 
 test('--apply, --report, and --tracker-path are rejected outside adopt mode', () => {

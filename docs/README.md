@@ -28,6 +28,7 @@ Onboarding split:
 - Greenfield repos: scaffold from `templates/greenfield` (degit or GitHub Template), then run `npm run governance:bootstrap` (`degit` users run `git init` first).
 - Existing repos: use Stage 6 migration (`adopt`) commands.
 - Existing repos with custom or ambiguous tracker layouts: pass `--tracker-path <path>` so `adopt` preserves the current tracker instead of planning canonical `docs/tracker.md`.
+- Existing npm repos with operational nested packages: if `adopt` reports `layout: hybrid` and `inferenceStatus: ambiguous`, rerun with an explicit `--preset`.
 
 ## Source of Truth
 
