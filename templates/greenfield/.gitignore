@@ -1,2 +1,5 @@
 node_modules/
 .governance/backups/
+.governance/release-check/
+.governance/adopt-report.md
+.governance/patches/adopt.patch

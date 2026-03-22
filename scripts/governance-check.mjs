@@ -893,6 +893,42 @@ function readConfiguredTrackerPath(configPath = CONFIG_PATH) {
   return normalizeRepoRelativePath(trackerPath.trim());
 }
 
+function readRootGitignoreEntries() {
+  const gitignorePath = targetPath('.gitignore');
+  if (!existsSync(gitignorePath)) {
+    return new Set();
+  }
+
+  return new Set(
+    readFileSync(gitignorePath, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))
+  );
+}
+
+function resolveAdoptIgnoreGuidance(reportPath, patchPath) {
+  const entries = readRootGitignoreEntries();
+  const normalizedReportPath = normalizeRepoRelativePath(reportPath);
+  const normalizedPatchPath = normalizeRepoRelativePath(patchPath);
+  const reportCoverageEntries = normalizedReportPath === ADOPT_REPORT_PATH
+    ? ['.governance/', ADOPT_REPORT_PATH]
+    : [normalizedReportPath];
+  const patchCoverageEntries = normalizedPatchPath === ADOPT_PATCH_PATH
+    ? ['.governance/', '.governance/patches/', ADOPT_PATCH_PATH]
+    : [normalizedPatchPath];
+  const reportCovered = reportCoverageEntries.some((entry) => entries.has(entry));
+  const patchCovered = patchCoverageEntries.some((entry) => entries.has(entry));
+
+  return {
+    reportPath: normalizedReportPath,
+    patchPath: normalizedPatchPath,
+    reportCovered,
+    patchCovered,
+    needsGuidance: !reportCovered || !patchCovered,
+  };
+}
+
 function listRepoFilesForDiscovery() {
   if (isGitRepo()) {
     const tracked = execText('git', ['ls-files']);
@@ -1883,6 +1919,18 @@ function runAdopt(options) {
   }
 
   if (!runtimeOptions.apply) {
+    const ignoreGuidance = resolveAdoptIgnoreGuidance(reportPath, patchPath);
+    if (ignoreGuidance.needsGuidance) {
+      info('[governance:adopt] Ignore guidance: report-only artifacts are usually local review outputs and should be added to .gitignore unless intentionally preserved.');
+      info(`[governance:adopt] Review artifact path: ${ignoreGuidance.reportPath}`);
+      info(`[governance:adopt] Review patch path: ${ignoreGuidance.patchPath}`);
+      if (!ignoreGuidance.reportCovered) {
+        info(`[governance:adopt] Suggested ignore entry: ${ignoreGuidance.reportPath}`);
+      }
+      if (!ignoreGuidance.patchCovered) {
+        info(`[governance:adopt] Suggested ignore entry: ${ignoreGuidance.patchPath}`);
+      }
+    }
     if (reportBlockers.length) {
       failBlocked(`✖ adopt blocked. Review ${reportPath} and patch ${patchPath}.`);
     }

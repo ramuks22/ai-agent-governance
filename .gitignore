@@ -4,6 +4,9 @@ coverage/
 dist/
 .env
 .env.*
+.governance/backups/
 .governance/release-check/
+.governance/adopt-report.md
+.governance/patches/adopt.patch
 plans/*
 !plans/ag-gov-003-stage0-decision-doc.md

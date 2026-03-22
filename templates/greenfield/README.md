@@ -31,6 +31,7 @@ This runs:
 ## Next Steps
 
 - Replace placeholder scripts (`format:check`, `lint`, `test`, `build`) with your project commands.
+- The template `.gitignore` already ignores governance local artifacts such as backups, release-check reports, and adopt review outputs; force-add them only when you intentionally want to preserve those files in git.
 - Start implementation on a compliant feature branch (for example `feat/your-scope`).
 
 ## Scope Note

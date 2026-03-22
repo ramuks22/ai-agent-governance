@@ -2,7 +2,7 @@
 
 This folder contains the governance framework documentation.
 
-## Installable Distribution (AG-GOV-003 Stage 11)
+## Installable Distribution (AG-GOV-003 Stage 12+)
 
 Package-first commands:
 
@@ -29,6 +29,21 @@ Onboarding split:
 - Existing repos: use Stage 6 migration (`adopt`) commands.
 - Existing repos with custom or ambiguous tracker layouts: pass `--tracker-path <path>` so `adopt` preserves the current tracker instead of planning canonical `docs/tracker.md`.
 - Existing npm repos with operational nested packages: if `adopt` reports `layout: hybrid` and `inferenceStatus: ambiguous`, rerun with an explicit `--preset`.
+
+### Governance Artifact Ignore Defaults
+
+Recommended ignore entries for local governance artifacts:
+
+```gitignore
+.governance/backups/
+.governance/release-check/
+.governance/adopt-report.md
+.governance/patches/adopt.patch
+```
+
+- `adopt` guidance is advisory-only and mentions only the current report/patch artifacts for that run.
+- Blanket `.governance/patches/` is accepted as existing adopter coverage, but it is not the recommended shipped default.
+- Repo-root `.gitignore` is the only file checked at runtime; global excludes, nested `.gitignore`, and `.git/info/exclude` can still cause false-positive guidance.
 
 ## Source of Truth
 

@@ -419,6 +419,23 @@ CLI equivalent (package mode):
   - `npx @ramuks22/ai-agent-governance rollback --to <snapshot-id>`
 - Known limitation: delegated shell scripts and workspace-targeting commands are not inferred for hybrid detection in this stage; use explicit `--preset` when in doubt.
 
+#### Recommended `.gitignore` Entries
+
+Report-only `adopt` artifacts are usually local review outputs. The shipped default ignore policy is:
+
+```gitignore
+.governance/backups/
+.governance/release-check/
+.governance/adopt-report.md
+.governance/patches/adopt.patch
+```
+
+Notes:
+
+- `adopt` runtime guidance is advisory only and does not edit `.gitignore` for you.
+- The recommended shipped default is `.governance/patches/adopt.patch`, not blanket `.governance/patches/`.
+- Coverage checks read repo-root `.gitignore` only. If you rely on global gitignore, nested `.gitignore`, or `.git/info/exclude`, `adopt` can still print ignore guidance as a false-positive advisory.
+
 ### Stage 11 Release Execution Notes
 
 - `release-publish` is dry-run by default and always writes:
@@ -444,7 +461,7 @@ Note: The `lint`, `format:check`, and `build` scripts in `package.json` are plac
 - See `CHANGELOG.md` for versioned changes
 - Use `configVersion` in `governance.config.json` to track upgrades
 - Report issues using the governance issue template
-- AG-GOV-003 Stage 0-10 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration + greenfield template + release hardening docs + release preflight automation + release evidence artifacts). Stage 11 is active via AG-GOV-047/048/049.
+- AG-GOV-003 Stage 0-11 is implemented (decision doc + package CLI + installer idempotency + upgrade/rollback/corruption handling + presets/wizard + CI integration + adopt migration + greenfield template + release hardening docs + release preflight automation + release evidence artifacts + controlled publish execution). Stage 12 adopt hardening is active via AG-GOV-050/051/052.
 
 ## License
 
