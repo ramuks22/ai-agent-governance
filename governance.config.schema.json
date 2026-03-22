@@ -57,6 +57,16 @@
         }
       }
     },
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preCiCommand": {
+          "type": "string",
+          "pattern": "\\S"
+        }
+      }
+    },
     "branchProtection": {
       "type": "object",
       "additionalProperties": false,

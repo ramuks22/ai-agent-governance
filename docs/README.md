@@ -30,6 +30,12 @@ Onboarding split:
 - Existing repos with custom or ambiguous tracker layouts: pass `--tracker-path <path>` so `adopt` preserves the current tracker instead of planning canonical `docs/tracker.md`.
 - Existing npm repos with operational nested packages: if `adopt` reports `layout: hybrid` and `inferenceStatus: ambiguous`, rerun with an explicit `--preset`.
 
+CI prerequisite hook:
+
+- Set `ci.preCiCommand` in `governance.config.json` when CI needs a one-time codegen step before `ci-check` executes selected gates.
+- The feature is config-driven inside `ci-check`; direct and reusable Governance CI workflows need no extra inputs.
+- `doctor` remains invocation-based and does not validate the semantics of `ci.preCiCommand` independently.
+
 ### Governance Artifact Ignore Defaults
 
 Recommended ignore entries for local governance artifacts:

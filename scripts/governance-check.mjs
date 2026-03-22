@@ -893,6 +893,43 @@ function readConfiguredTrackerPath(configPath = CONFIG_PATH) {
   return normalizeRepoRelativePath(trackerPath.trim());
 }
 
+function readConfiguredGenerationOverrides(configPath = CONFIG_PATH) {
+  const configFile = targetPath(configPath);
+  if (!existsSync(configFile)) {
+    return {
+      trackerPath: '',
+      preCiCommand: '',
+    };
+  }
+
+  const config = tryLoadJson(configFile);
+  if (!config) {
+    fail(`✖ Cannot preserve generated config overrides from ${configPath}; fix invalid JSON before rerunning adopt or upgrade.`);
+  }
+
+  const trackerPath = readConfiguredTrackerPath(configPath);
+  const ciConfig = config.ci;
+  if (ciConfig === undefined) {
+    return { trackerPath, preCiCommand: '' };
+  }
+  if (!ciConfig || typeof ciConfig !== 'object' || Array.isArray(ciConfig)) {
+    fail(`✖ Cannot preserve ci.preCiCommand from ${configPath}; expected "ci" to be an object.`);
+  }
+
+  const preCiCommand = ciConfig.preCiCommand;
+  if (preCiCommand === undefined) {
+    return { trackerPath, preCiCommand: '' };
+  }
+  if (typeof preCiCommand !== 'string' || !preCiCommand.trim()) {
+    fail(`✖ Cannot preserve ci.preCiCommand from ${configPath}; expected a non-empty string.`);
+  }
+
+  return {
+    trackerPath,
+    preCiCommand: preCiCommand.trim(),
+  };
+}
+
 function readRootGitignoreEntries() {
   const gitignorePath = targetPath('.gitignore');
   if (!existsSync(gitignorePath)) {
@@ -1236,11 +1273,29 @@ function hookScriptContent(type) {
   return `#!/bin/sh\nset -eu\n\nnode ./node_modules/${PACKAGE_NAME}/scripts/commit-msg.mjs "$1"\n`;
 }
 
-function buildGeneratedConfigContent(preset, trackerPathOverride = '') {
-  const generated = JSON.parse(JSON.stringify(PRESETS[preset]));
-  if (trackerPathOverride) {
-    generated.tracker.path = trackerPathOverride;
+function validateConfigObject(config, label = 'config', schemaFile = targetPath(SCHEMA_PATH)) {
+  if (!existsSync(schemaFile)) {
+    fail(`✖ Missing schema: ${SCHEMA_PATH}`);
   }
+
+  const schema = loadJson(schemaFile, 'schema');
+  const ajv = new Ajv({ allErrors: true });
+  const validate = ajv.compile(schema);
+  const valid = validate(config);
+  if (!valid) {
+    fail(`✖ Invalid ${label}:\n${ajv.errorsText(validate.errors)}`);
+  }
+}
+
+function buildGeneratedConfigContent(preset, overrides = {}) {
+  const generated = JSON.parse(JSON.stringify(PRESETS[preset]));
+  if (overrides.trackerPath) {
+    generated.tracker.path = overrides.trackerPath;
+  }
+  if (overrides.preCiCommand) {
+    generated.ci = { preCiCommand: overrides.preCiCommand };
+  }
+  validateConfigObject(generated, 'generated config', sourcePath(SCHEMA_PATH));
   return `${JSON.stringify(generated, null, 2)}\n`;
 }
 
@@ -1266,7 +1321,7 @@ function collectManagedItems(options) {
     files.push({
       relPath: CONFIG_PATH,
       source: 'generated',
-      content: buildGeneratedConfigContent(options.preset, options.generatedTrackerPath),
+      content: buildGeneratedConfigContent(options.preset, options.generatedOverrides),
       stage: 'generate-config',
       strategy: strategyForPath(CONFIG_PATH),
     });
@@ -1842,13 +1897,18 @@ function runAdopt(options) {
   const manifest = readManifest();
   const profile = detectAdoptRepoProfile(options);
   const runtimeOptions = resolveAdoptRuntimeOptions(options, manifest, profile);
+  const preservedOverrides = readConfiguredGenerationOverrides(options.configPath || CONFIG_PATH);
   const forceEnabled = runtimeOptions.apply && runtimeOptions.force;
   const conflictState = detectHookManagers();
   const skipGeneratedWrites = runtimeOptions.trackerBlockers.length > 0 || runtimeOptions.presetSource === 'unresolved';
+  const generatedOverrides = {
+    ...preservedOverrides,
+    trackerPath: runtimeOptions.trackerPath || preservedOverrides.trackerPath,
+  };
   const managedEntries = collectManagedItems({
     ...runtimeOptions,
-    generatedTrackerPath: runtimeOptions.trackerPath || '',
-    includeTrackerFile: runtimeOptions.trackerPath === TRACKER_PATH || runtimeOptions.trackerStatus === 'none',
+    generatedOverrides,
+    includeTrackerFile: generatedOverrides.trackerPath === TRACKER_PATH || runtimeOptions.trackerStatus === 'none',
     skipGeneratedConfig: skipGeneratedWrites,
     skipGeneratedWrites,
   });
@@ -2092,13 +2152,13 @@ function runUpgrade(options) {
     fail('✖ Missing .governance/manifest.json. Run: npx @ramuks22/ai-agent-governance init');
   }
 
-  const preservedTrackerPath = readConfiguredTrackerPath(options.configPath || CONFIG_PATH);
+  const generatedOverrides = readConfiguredGenerationOverrides(options.configPath || CONFIG_PATH);
   const runtimeOptions = {
     ...options,
     preset: manifest.preset || options.preset,
     hookStrategy: manifest.hookStrategy || options.hookStrategy,
-    generatedTrackerPath: preservedTrackerPath || '',
-    includeTrackerFile: preservedTrackerPath ? preservedTrackerPath === TRACKER_PATH : true,
+    generatedOverrides,
+    includeTrackerFile: generatedOverrides.trackerPath ? generatedOverrides.trackerPath === TRACKER_PATH : true,
   };
 
   const managedEntries = collectManagedItems(runtimeOptions);
@@ -2249,15 +2309,7 @@ function validateConfig(configPath) {
   }
 
   const config = loadJson(targetPath(configPath), 'config');
-  const schema = loadJson(targetPath(SCHEMA_PATH), 'schema');
-
-  const ajv = new Ajv({ allErrors: true });
-  const validate = ajv.compile(schema);
-  const valid = validate(config);
-  if (!valid) {
-    fail(`✖ Invalid config:\n${ajv.errorsText(validate.errors)}`);
-  }
-
+  validateConfigObject(config, 'config', targetPath(SCHEMA_PATH));
   return config;
 }
 
@@ -2349,9 +2401,18 @@ function ensureNoCiCheckRecursion(commands, gateLabel) {
     if (recursive) {
       fail(
         `✖ Recursive ci-check command detected in ${gateLabel}: "${commandText}". ` +
-        'Remove ci-check self-invocation from gate commands.'
+        `Remove ci-check self-invocation from ${gateLabel}.`
       );
     }
+  }
+}
+
+function runPreCiCommand(commandText) {
+  ensureNoCiCheckRecursion([commandText], 'ci.preCiCommand');
+  info(`[governance:ci-check] preCi: ${commandText}`);
+  const result = runShellCommand(commandText);
+  if (!result.ok) {
+    fail(`✖ ci-check failed during ci.preCiCommand: "${commandText}"`);
   }
 }
 
@@ -2370,6 +2431,7 @@ function runCiCheck(options) {
   const config = validateConfig(options.configPath);
   checkNodeVersion(config.node.minVersion);
   checkTrackerExists(config.tracker.path);
+  const preCiCommand = config.ci?.preCiCommand?.trim() || '';
 
   const scopes = {
     precommit: { label: 'preCommit', commands: config.gates.preCommit || [] },
@@ -2377,6 +2439,9 @@ function runCiCheck(options) {
   };
 
   const selected = options.ciGate === 'all' ? ['precommit', 'prepush'] : [options.ciGate];
+  if (preCiCommand) {
+    runPreCiCommand(preCiCommand);
+  }
   for (const key of selected) {
     const scope = scopes[key];
     runCiGateCommands(scope.commands, scope.label);

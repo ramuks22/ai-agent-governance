@@ -20,6 +20,9 @@
       "npm run -s build"
     ]
   },
+  "ci": {
+    "preCiCommand": "npm run codegen"
+  },
   "branchProtection": {
     "blockDirectPush": [
       "main",
