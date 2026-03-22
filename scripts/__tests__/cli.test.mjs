@@ -333,6 +333,91 @@ test('ci-check runs preCommit then prePush and fails fast on first failure', () 
   ]);
 });
 
+for (const [suffix, gate, expected] of [
+  ['precommit', 'precommit', ['pre-ci', 'precommit-pass']],
+  ['prepush', 'prepush', ['pre-ci', 'prepush-pass']],
+  ['all', 'all', ['pre-ci', 'precommit-pass', 'prepush-pass']],
+]) {
+  test(`ci-check runs preCiCommand once before ${gate} gate selection`, () => {
+    const repo = setupRepo(`gov-cli-ci-pre-command-${suffix}`);
+    const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+    assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+    mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+    writeFileSync(
+      path.join(repo, 'scripts', 'ci-pre-helper.mjs'),
+      `import { appendFileSync } from 'node:fs';\n` +
+      `appendFileSync('.ci-pre.log', \`\${process.argv[2]}\\n\`);\n`,
+      'utf8'
+    );
+
+    const configPath = path.join(repo, 'governance.config.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf8'));
+    config.ci = { preCiCommand: 'node scripts/ci-pre-helper.mjs pre-ci' };
+    config.gates.preCommit = ['node scripts/ci-pre-helper.mjs precommit-pass'];
+    config.gates.prePush = ['node scripts/ci-pre-helper.mjs prepush-pass'];
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+    const result = run(['ci-check', '--gate', gate], repo);
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /\[governance:ci-check\] preCi: node scripts\/ci-pre-helper\.mjs pre-ci/);
+    assert.deepEqual(readFileSync(path.join(repo, '.ci-pre.log'), 'utf8').trim().split('\n'), expected);
+  });
+}
+
+test('ci-check treats empty ci object as disabled', () => {
+  const repo = setupRepo('gov-cli-ci-empty-object');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+  writeFileSync(
+    path.join(repo, 'scripts', 'ci-pre-helper.mjs'),
+    `import { appendFileSync } from 'node:fs';\n` +
+    `appendFileSync('.ci-pre.log', \`\${process.argv[2]}\\n\`);\n`,
+    'utf8'
+  );
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.ci = {};
+  config.gates.preCommit = ['node scripts/ci-pre-helper.mjs precommit-pass'];
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['ci-check', '--gate', 'precommit'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.doesNotMatch(result.stdout, /\[governance:ci-check\] preCi:/);
+  assert.deepEqual(readFileSync(path.join(repo, '.ci-pre.log'), 'utf8').trim().split('\n'), ['precommit-pass']);
+});
+
+test('ci-check fails before gates when preCiCommand fails', () => {
+  const repo = setupRepo('gov-cli-ci-pre-command-fail');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+  writeFileSync(
+    path.join(repo, 'scripts', 'ci-pre-helper.mjs'),
+    `import { appendFileSync } from 'node:fs';\n` +
+      `const label = process.argv[2] || 'unknown';\n` +
+      `appendFileSync('.ci-pre.log', \`\${label}\\n\`);\n` +
+      `if (label === 'pre-ci-fail') process.exit(1);\n`,
+    'utf8'
+  );
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.ci = { preCiCommand: 'node scripts/ci-pre-helper.mjs pre-ci-fail' };
+  config.gates.preCommit = ['node scripts/ci-pre-helper.mjs precommit-pass'];
+  config.gates.prePush = ['node scripts/ci-pre-helper.mjs prepush-pass'];
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['ci-check', '--gate', 'all'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /ci-check failed during ci\.preCiCommand/);
+  assert.deepEqual(readFileSync(path.join(repo, '.ci-pre.log'), 'utf8').trim().split('\n'), ['pre-ci-fail']);
+});
+
 test('ci-check recursion guard blocks self-referential gate commands', () => {
   const repo = setupRepo('gov-cli-ci-check-recursive');
   const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
@@ -347,6 +432,51 @@ test('ci-check recursion guard blocks self-referential gate commands', () => {
   const result = run(['ci-check', '--gate', 'all'], repo);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Recursive ci-check command detected/);
+});
+
+test('ci-check recursion guard blocks self-referential preCiCommand', () => {
+  const repo = setupRepo('gov-cli-ci-check-preci-recursive');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.ci = { preCiCommand: 'npx --no-install ai-governance ci-check --gate all' };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['ci-check', '--gate', 'all'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Recursive ci-check command detected in ci\.preCiCommand/);
+});
+
+test('ci-check rejects whitespace-only preCiCommand config', () => {
+  const repo = setupRepo('gov-cli-ci-preci-whitespace');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.ci = { preCiCommand: '   ' };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['ci-check', '--gate', 'all'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Invalid config/);
+});
+
+test('ci-check rejects non-string preCiCommand config', () => {
+  const repo = setupRepo('gov-cli-ci-preci-non-string');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.ci = { preCiCommand: 42 };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['ci-check', '--gate', 'all'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Invalid config/);
 });
 
 test('invalid preset error lists all supported presets', () => {
@@ -594,6 +724,73 @@ test('adopt --tracker-path resolves custom tracker mapping and upgrade preserves
   assert.doesNotMatch(upgrade.stdout, /docs\/tracker\.md/);
   const configAfterUpgrade = JSON.parse(readFileSync(path.join(repo, 'governance.config.json'), 'utf8'));
   assert.equal(configAfterUpgrade.tracker.path, 'docs/tracker.json');
+});
+
+test('adopt preserves ci.preCiCommand when regenerating config', () => {
+  const repo = setupRepo('gov-cli-adopt-preserve-preci');
+  mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(path.join(repo, 'docs', 'tracker.md'), '# Tracker\n', 'utf8');
+  writeSampleGovernanceConfig(repo, 'docs/tracker.md');
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.ci = { preCiCommand: 'npm run codegen' };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['adopt', '--apply', '--force'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const updated = JSON.parse(readFileSync(configPath, 'utf8'));
+  assert.deepEqual(updated.ci, { preCiCommand: 'npm run codegen' });
+});
+
+test('upgrade preserves ci.preCiCommand when rewriting managed config', () => {
+  const repo = setupRepo('gov-cli-upgrade-preserve-preci');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.ci = { preCiCommand: 'npm run codegen' };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['upgrade', '--force'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const updated = JSON.parse(readFileSync(configPath, 'utf8'));
+  assert.deepEqual(updated.ci, { preCiCommand: 'npm run codegen' });
+});
+
+test('adopt fails safely when existing config JSON is invalid and overrides cannot be preserved', () => {
+  const repo = setupRepo('gov-cli-adopt-invalid-json-preserve');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(path.join(repo, 'governance.config.json'), '{\n', 'utf8');
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Cannot preserve generated config overrides/);
+});
+
+test('upgrade fails safely when existing preCiCommand is invalid', () => {
+  const repo = setupRepo('gov-cli-upgrade-invalid-preci-preserve');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.ci = { preCiCommand: 17 };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['upgrade', '--force'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Cannot preserve ci\.preCiCommand/);
 });
 
 test('adopt report-only keeps blockers visible even when --force is provided', () => {

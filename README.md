@@ -168,6 +168,7 @@ The framework is driven by `governance.config.json` and validated against `gover
 | `tracker.allowedPrefixes` | Allowed ID prefixes (e.g., `["AG", "SEC"]`) |
 | `gates.preCommit` | Commands to run on pre-commit |
 | `gates.prePush` | Commands to run on pre-push |
+| `ci.preCiCommand` | Optional command to run once before `ci-check` executes selected CI gates |
 | `branchProtection.blockDirectPush` | Branches that block direct pushes |
 | `branchProtection.branchNamePattern` | Regex for allowed branch names |
 | `node.minVersion` | Minimum required Node.js version |
@@ -186,6 +187,9 @@ The framework is driven by `governance.config.json` and validated against `gover
     "preCommit": ["npm run -s format:check", "npm run -s lint"],
     "prePush": ["npm run -s test", "npm run -s build"]
   },
+  "ci": {
+    "preCiCommand": "npm run codegen"
+  },
   "branchProtection": {
     "blockDirectPush": ["main", "master"],
     "branchNamePattern": "^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$"
@@ -195,6 +199,8 @@ The framework is driven by `governance.config.json` and validated against `gover
   }
 }
 ```
+
+`ci.preCiCommand` is optional. When present, `ci-check` runs it once after config/node/tracker validation and before the selected `preCommit` / `prePush` gate commands. Use a generic command such as `npm run codegen`; Prisma-style repos can point it at `npx prisma generate`.
 
 ### Branch Naming Enforcement
 
@@ -314,6 +320,7 @@ Local hooks are the first line of defense, but CI is the ultimate gate.
    - Direct workflow copy: `.github/workflows/governance-ci.yml`
    - Reusable workflow call (pinned ref): `.github/workflows/governance-ci-reusable.yml`
 2. Ensure your `governance.config.json` gates match `ci-check` execution.
+   - If your build depends on generated code, set `ci.preCiCommand` in `governance.config.json`; no extra workflow input is required.
 3. Enable branch protection requiring CI pass.
 
 ### Reusable Workflow (Pinned Ref Example)
@@ -346,6 +353,10 @@ npx --yes @ramuks22/ai-agent-governance@<PINNED_PACKAGE_VERSION> ci-check --gate
 
 For pnpm/yarn repositories using the reusable GitHub workflow, set
 `install_command` to your package-manager equivalent.
+
+No separate workflow input is needed for pre-build codegen. The shipped direct and reusable workflows already invoke `ci-check`, and `ci-check` will execute `ci.preCiCommand` when configured.
+
+Known limitation: `doctor` still validates CI parity by checking that CI invokes `ci-check` or the reusable workflow. It does not independently reason about the semantics of `ci.preCiCommand`.
 
 ### Why Required?
 
