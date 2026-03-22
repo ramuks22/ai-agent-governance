@@ -424,6 +424,76 @@ test('adopt report-only writes report and patch without managed-file mutations',
   assert.equal(existsSync(path.join(repo, '.governance', 'adopt-report.md')), true);
   assert.equal(existsSync(path.join(repo, '.governance', 'patches', 'adopt.patch')), true);
   assert.equal(existsSync(path.join(repo, '.governance', 'manifest.json')), false);
+  assert.match(result.stdout, /\[governance:adopt\] Ignore guidance:/);
+  assert.match(result.stdout, /\[governance:adopt\] Review artifact path: \.governance\/adopt-report\.md/);
+  assert.match(result.stdout, /\[governance:adopt\] Review patch path: \.governance\/patches\/adopt\.patch/);
+  assert.match(result.stdout, /\[governance:adopt\] Suggested ignore entry: \.governance\/adopt-report\.md/);
+  assert.match(result.stdout, /\[governance:adopt\] Suggested ignore entry: \.governance\/patches\/adopt\.patch/);
+});
+
+test('adopt report-only suppresses ignore guidance when repo-root .gitignore exactly covers adopt artifacts', () => {
+  const repo = setupRepo('gov-cli-adopt-report-gitignore-covered');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(
+    path.join(repo, '.gitignore'),
+    '# local governance artifacts\n   .governance/adopt-report.md   \n.governance/patches/adopt.patch   \n',
+    'utf8'
+  );
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.doesNotMatch(result.stdout, /\[governance:adopt\] Ignore guidance:/);
+});
+
+test('adopt report-only suppresses ignore guidance when repo-root .gitignore broadly ignores .governance', () => {
+  const repo = setupRepo('gov-cli-adopt-report-gitignore-governance');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(path.join(repo, '.gitignore'), '.governance/\n', 'utf8');
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.doesNotMatch(result.stdout, /\[governance:adopt\] Ignore guidance:/);
+});
+
+test('adopt report-only with custom report path prints adopt-specific ignore guidance for uncovered artifacts', () => {
+  const repo = setupRepo('gov-cli-adopt-report-custom-path');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+
+  const result = run(['adopt', '--report', 'custom/adopt-review.md'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(existsSync(path.join(repo, 'custom', 'adopt-review.md')), true);
+  assert.match(result.stdout, /\[governance:adopt\] Review artifact path: custom\/adopt-review\.md/);
+  assert.match(result.stdout, /\[governance:adopt\] Review patch path: \.governance\/patches\/adopt\.patch/);
+  assert.match(result.stdout, /\[governance:adopt\] Suggested ignore entry: custom\/adopt-review\.md/);
+  assert.match(result.stdout, /\[governance:adopt\] Suggested ignore entry: \.governance\/patches\/adopt\.patch/);
+});
+
+test('adopt report-only with custom report path suppresses report guidance when exact repo-root .gitignore entry exists', () => {
+  const repo = setupRepo('gov-cli-adopt-report-custom-covered');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(path.join(repo, '.gitignore'), 'custom/adopt-review.md\n', 'utf8');
+
+  const result = run(['adopt', '--report', 'custom/adopt-review.md'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /\[governance:adopt\] Ignore guidance:/);
+  assert.doesNotMatch(result.stdout, /\[governance:adopt\] Suggested ignore entry: custom\/adopt-review\.md/);
+  assert.match(result.stdout, /\[governance:adopt\] Suggested ignore entry: \.governance\/patches\/adopt\.patch/);
 });
 
 test('adopt blocks ambiguous tracker mapping without planning canonical tracker writes', () => {
@@ -478,6 +548,7 @@ test('adopt returns exit code 2 for blocked unsupported inference', () => {
 
   const result = run(['adopt'], repo);
   assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /\[governance:adopt\] Ignore guidance:/);
   assert.match(result.stderr, /adopt blocked/);
   assert.equal(existsSync(path.join(repo, '.governance', 'adopt-report.md')), true);
 });
@@ -550,10 +621,12 @@ test('adopt --apply blocks on dirty tree unless --force, and force path records 
   writeFileSync(path.join(repo, 'scratch.txt'), 'dirty\n', 'utf8');
   const blocked = run(['adopt', '--apply'], repo);
   assert.equal(blocked.status, 2, `${blocked.stdout}\n${blocked.stderr}`);
+  assert.doesNotMatch(blocked.stdout, /\[governance:adopt\] Ignore guidance:/);
   assert.match(blocked.stderr, /adopt apply blocked/);
 
   const forced = run(['adopt', '--apply', '--force'], repo);
   assert.equal(forced.status, 0, `${forced.stdout}\n${forced.stderr}`);
+  assert.doesNotMatch(forced.stdout, /\[governance:adopt\] Ignore guidance:/);
   assert.equal(existsSync(path.join(repo, '.governance', 'manifest.json')), true);
   assert.equal(existsSync(path.join(repo, '.governance', 'backups', 'index.json')), true);
   assert.match(forced.stdout, /Rollback: npx @ramuks22\/ai-agent-governance rollback --to/);
@@ -744,6 +817,21 @@ test('upgrade dry-run can emit deterministic patch output', () => {
   assert.match(upgrade.stdout, /Wrote patch file/);
 });
 
+test('repo and greenfield template ship canonical governance artifact ignore defaults', () => {
+  const rootGitignore = readFileSync(path.resolve(__dirname, '..', '..', '.gitignore'), 'utf8');
+  const templateGitignore = readFileSync(
+    path.resolve(__dirname, '..', '..', 'templates', 'greenfield', '.gitignore'),
+    'utf8'
+  );
+
+  for (const content of [rootGitignore, templateGitignore]) {
+    assert.match(content, /^\.governance\/backups\/$/m);
+    assert.match(content, /^\.governance\/release-check\/$/m);
+    assert.match(content, /^\.governance\/adopt-report\.md$/m);
+    assert.match(content, /^\.governance\/patches\/adopt\.patch$/m);
+  }
+});
+
 test('upgrade conflicts fail closed and rollback restores snapshot when forced', () => {
   const repo = setupRepo('gov-cli-upgrade-rollback');
   const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
@@ -925,12 +1013,12 @@ test('release-check workflow uploads only report artifacts with 14-day retention
   assert.match(workflow, /retention-days:\s*14/);
 });
 
-test('stage 11 docs mention release-check report mode', () => {
+test('installable distribution docs mention release-check report mode', () => {
   const readme = readFileSync(path.join(process.cwd(), 'README.md'), 'utf8');
   const docsIndex = readFileSync(path.join(process.cwd(), 'docs', 'README.md'), 'utf8');
   const policy = readFileSync(path.join(process.cwd(), 'docs', 'development', 'release-maintenance-policy.md'), 'utf8');
 
   assert.match(readme, /release-check --scope all --report both --out-dir \.governance\/release-check/);
-  assert.match(docsIndex, /Installable Distribution \(AG-GOV-003 Stage 11\)/);
+  assert.match(docsIndex, /Installable Distribution \(AG-GOV-003 Stage 12\+\)/);
   assert.match(policy, /Preferred automation path \(Stage 10\)/);
 });
