@@ -1,0 +1,150 @@
+{
+  "registryVersion": "1.0",
+  "roles": [
+    {
+      "name": "governance-designer",
+      "purpose": "Own canonical agentic operating docs and migration guidance.",
+      "trigger_conditions": [
+        "Task changes delegation policy, role semantics, handoff requirements, retrospective policy, or migration guidance."
+      ],
+      "scope": [
+        "Canonical operating model docs",
+        "Migration notes",
+        "Example flow documentation"
+      ],
+      "read_only": false,
+      "owned_paths": [
+        "docs/agentic/**",
+        "docs/examples/agentic-example-flow.md"
+      ],
+      "inputs": [
+        "Tracker item",
+        "Requirements workshop artifact",
+        "Current governance canon"
+      ],
+      "outputs": [
+        "Updated operating-model docs",
+        "Updated migration notes",
+        "Updated example flow"
+      ],
+      "validation_scope": [
+        "Canonical/guidance consistency",
+        "Vendor-neutral wording"
+      ],
+      "overlap_rules": [
+        "Writable ownership cannot overlap with any other writable role."
+      ],
+      "retirement_conditions": [
+        "Retire only if another bounded documentation role absorbs the same responsibility without increasing overlap."
+      ]
+    },
+    {
+      "name": "schema-steward",
+      "purpose": "Own schema-backed registries and config schema updates for agentic governance.",
+      "trigger_conditions": [
+        "Task changes role, skill, handoff, retrospective, adapter, or config validation contracts."
+      ],
+      "scope": [
+        "JSON schemas",
+        "Canonical registries",
+        "Config schema"
+      ],
+      "read_only": false,
+      "owned_paths": [
+        "schemas/**",
+        "governance/**",
+        "governance.config.schema.json"
+      ],
+      "inputs": [
+        "Canonical docs",
+        "Requirements workshop artifact",
+        "Existing validation patterns"
+      ],
+      "outputs": [
+        "Updated schemas",
+        "Updated registries",
+        "Updated config schema"
+      ],
+      "validation_scope": [
+        "Schema validity",
+        "Role ownership overlap validation"
+      ],
+      "overlap_rules": [
+        "Writable ownership cannot overlap with any other writable role."
+      ],
+      "retirement_conditions": [
+        "Retire only if schema and registry ownership moves to another bounded validation role."
+      ]
+    },
+    {
+      "name": "adapter-maintainer",
+      "purpose": "Own deterministic adapter rendering and generated adapter outputs.",
+      "trigger_conditions": [
+        "Task changes generated adapter templates, adapter rendering logic, or generated adapter outputs."
+      ],
+      "scope": [
+        "Adapter renderer",
+        "Generated adapter outputs"
+      ],
+      "read_only": false,
+      "owned_paths": [
+        "scripts/agentic.mjs",
+        "scripts/generate-agentic-adapters.mjs",
+        "generated/adapters/**"
+      ],
+      "inputs": [
+        "Canonical docs",
+        "Role registry",
+        "Skill registry",
+        "Adapter registry"
+      ],
+      "outputs": [
+        "Updated adapter generator",
+        "Regenerated adapter outputs"
+      ],
+      "validation_scope": [
+        "Adapter drift detection",
+        "Generated banner and provenance checks"
+      ],
+      "overlap_rules": [
+        "Writable ownership cannot overlap with any other writable role."
+      ],
+      "retirement_conditions": [
+        "Retire only if generated adapter ownership is moved intact to another bounded role."
+      ]
+    },
+    {
+      "name": "delivery-auditor",
+      "purpose": "Review changes for workflow safety, migration risk, and validation completeness without taking write ownership.",
+      "trigger_conditions": [
+        "Task changes governance behavior, ownership boundaries, or adapter drift enforcement."
+      ],
+      "scope": [
+        "Read-only review",
+        "Validation review",
+        "Migration-risk review"
+      ],
+      "read_only": true,
+      "owned_paths": [],
+      "inputs": [
+        "Canonical docs",
+        "Schemas and registries",
+        "Validation outputs"
+      ],
+      "outputs": [
+        "Review findings",
+        "Risk notes"
+      ],
+      "validation_scope": [
+        "Policy consistency",
+        "Validation completeness"
+      ],
+      "overlap_rules": [
+        "Read-only roles may inspect any path but do not claim writable ownership."
+      ],
+      "retirement_conditions": [
+        "Retire if audit responsibility is folded into another explicitly read-only review role."
+      ]
+    }
+  ]
+}

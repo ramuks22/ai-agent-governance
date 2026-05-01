@@ -22,6 +22,8 @@ Before starting any work, verify:
 
 - Work tracking: `docs/tracker.md`
 - Delivery governance: `docs/development/delivery-governance.md`
+- Agentic operating model: `docs/agentic/operating-model.md`
+- Adapter strategy: `docs/agentic/adapter-strategy.md`
 - Workflow rules: `.agent/workflows/governance.md`
 - Requirements workshop: `.agent/workflows/requirements-workshop.md`
 - Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`

@@ -1,0 +1,89 @@
+{
+  "registryVersion": "1.0",
+  "adapters": [
+    {
+      "name": "codex",
+      "target": "Codex",
+      "output_path": "generated/adapters/codex/AGENTS.md",
+      "format": "markdown",
+      "tool_notes": [
+        "Use this file as a projection for Codex-compatible instruction loading.",
+        "Reference the canonical docs directly when long-form policy context is needed."
+      ],
+      "limitations": [
+        "This projection does not replace the canonical operating model.",
+        "Runtime orchestration is out of scope."
+      ]
+    },
+    {
+      "name": "claude-code",
+      "target": "Claude / Claude Code",
+      "output_path": "generated/adapters/claude-code/CLAUDE.md",
+      "format": "markdown",
+      "tool_notes": [
+        "Use this file as the Claude-native instruction projection.",
+        "Keep tool-specific wording limited to wrapper guidance."
+      ],
+      "limitations": [
+        "This projection does not make Claude-specific folders canonical.",
+        "The generated file is a wrapper around canonical policy."
+      ]
+    },
+    {
+      "name": "cursor",
+      "target": "Cursor",
+      "output_path": "generated/adapters/cursor/.cursorrules",
+      "format": "plain-text",
+      "tool_notes": [
+        "Use this file as the Cursor rules projection.",
+        "When copied into a native location, keep the generated provenance banner."
+      ],
+      "limitations": [
+        "The repository does not treat `.cursorrules` as canonical source.",
+        "The projection stays intentionally concise."
+      ]
+    },
+    {
+      "name": "github-copilot",
+      "target": "GitHub Copilot",
+      "output_path": "generated/adapters/github-copilot/copilot-instructions.md",
+      "format": "markdown",
+      "tool_notes": [
+        "Use this file as the Copilot instruction projection.",
+        "Prefer linking back to canonical docs rather than duplicating policy in multiple places."
+      ],
+      "limitations": [
+        "This projection is only a generated adapter.",
+        "Copilot-specific workflows remain out of scope."
+      ]
+    },
+    {
+      "name": "antigravity",
+      "target": "Antigravity",
+      "output_path": "generated/adapters/antigravity/AGENT-GOVERNANCE.md",
+      "format": "markdown",
+      "tool_notes": [
+        "Use this file as the Antigravity projection when that tool consumes repo guidance from files or pasted context.",
+        "Keep any Antigravity-specific runtime details outside canonical governance source."
+      ],
+      "limitations": [
+        "This file is intentionally generic because runtime assumptions differ by deployment.",
+        "It must not become the source of truth."
+      ]
+    },
+    {
+      "name": "generic",
+      "target": "Generic fallback",
+      "output_path": "generated/adapters/generic/AGENT-GOVERNANCE.md",
+      "format": "markdown",
+      "tool_notes": [
+        "Use this file when a tool lacks a stable native instruction file convention.",
+        "Load the canonical docs alongside this projection whenever possible."
+      ],
+      "limitations": [
+        "This fallback is not a replacement for canonical docs.",
+        "Tool-specific optimizations are intentionally omitted."
+      ]
+    }
+  ]
+}

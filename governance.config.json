@@ -19,6 +19,24 @@
       "npm run -s build"
     ]
   },
+  "agentic": {
+    "enabled": true,
+    "roleRegistryPath": "governance/agent-roles.json",
+    "skillRegistryPath": "governance/agent-skills.json",
+    "adapterRegistryPath": "governance/agent-adapters.json",
+    "generatedAdapterPath": "generated/adapters",
+    "handoffArtifactPath": "examples/handoffs",
+    "retrospectiveArtifactPath": "examples/retrospectives",
+    "retrospectiveRequiredFor": [
+      "ownership-conflict",
+      "handoff-rework",
+      "validation-escape"
+    ],
+    "maxParallelWriters": 1,
+    "allowReadOnlyParallelism": true,
+    "requireBoundedOwnership": true,
+    "adapterGenerationMode": "checked-in"
+  },
   "branchProtection": {
     "blockDirectPush": [
       "main",

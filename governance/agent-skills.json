@@ -1,0 +1,116 @@
+{
+  "registryVersion": "1.0",
+  "skills": [
+    {
+      "name": "requirements-workshop",
+      "purpose": "Turn feature-level work into traceable requirements before implementation starts.",
+      "trigger_conditions": [
+        "Applicability is Required for feature-level work."
+      ],
+      "required_inputs": [
+        "Tracker ID",
+        "Problem statement",
+        "Source artifacts"
+      ],
+      "procedure": [
+        "Run the quick applicability decision.",
+        "Gather the minimum required roles, including one dissenting perspective.",
+        "Write the workshop artifact using the canonical headings.",
+        "Trace requirements back to stakeholder concerns."
+      ],
+      "outputs": [
+        "Workshop artifact",
+        "Traceable requirements"
+      ],
+      "validation": [
+        "Artifact uses canonical headings",
+        "Requirements include source role and validation criteria"
+      ],
+      "revision_policy": "Revise when workshop steps, role expectations, or traceability rules change."
+    },
+    {
+      "name": "delegation-planning",
+      "purpose": "Decide whether work should stay single-agent or split across bounded roles.",
+      "trigger_conditions": [
+        "A task may be delegated or parallelized."
+      ],
+      "required_inputs": [
+        "Task outcome",
+        "Write scopes",
+        "Validation scopes",
+        "Current role registry"
+      ],
+      "procedure": [
+        "Identify blocking work and sidecar work.",
+        "Confirm whether writable scopes are bounded and non-overlapping.",
+        "Prefer read-only parallelism before writable parallelism.",
+        "Record the decision in a handoff when ownership changes."
+      ],
+      "outputs": [
+        "Delegation decision",
+        "Handoff artifact when needed"
+      ],
+      "validation": [
+        "Writable ownership overlap is checked before delegation",
+        "Parallel writers do not exceed configured limits"
+      ],
+      "revision_policy": "Revise when ownership validation rules or handoff requirements change."
+    },
+    {
+      "name": "adapter-regeneration",
+      "purpose": "Regenerate vendor-specific adapters after canonical source changes.",
+      "trigger_conditions": [
+        "Canonical agentic docs or registries change.",
+        "Adapter drift is reported by validation."
+      ],
+      "required_inputs": [
+        "Canonical docs",
+        "Role registry",
+        "Skill registry",
+        "Adapter registry"
+      ],
+      "procedure": [
+        "Run the adapter generator.",
+        "Review generated outputs for expected target paths and provenance banners.",
+        "Run governance validation to confirm no drift remains."
+      ],
+      "outputs": [
+        "Regenerated adapters",
+        "Clean drift check"
+      ],
+      "validation": [
+        "Generated outputs match renderer output",
+        "No unexpected generated files remain"
+      ],
+      "revision_policy": "Revise when adapter formats or supported targets change."
+    },
+    {
+      "name": "retrospective-capture",
+      "purpose": "Convert repeated workflow pain into explicit guidance, skills, validations, or role changes.",
+      "trigger_conditions": [
+        "A configured retrospective trigger occurs.",
+        "Review comments or handoff failures repeat."
+      ],
+      "required_inputs": [
+        "Trigger event",
+        "Artifacts reviewed",
+        "Observed pain points"
+      ],
+      "procedure": [
+        "Summarize the trigger and reviewed evidence.",
+        "List pain points and root causes.",
+        "Prefer guidance, skill, or validation changes before proposing a new role.",
+        "Record follow-up actions explicitly."
+      ],
+      "outputs": [
+        "Retrospective artifact",
+        "Action recommendations"
+      ],
+      "validation": [
+        "Root causes are explicit",
+        "Recommended changes map to explicit artifacts"
+      ],
+      "revision_policy": "Revise when retrospective triggers or action categories change."
+    }
+  ]
+}

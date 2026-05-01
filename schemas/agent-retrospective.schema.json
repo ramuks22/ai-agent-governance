@@ -1,0 +1,115 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Retrospective Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "retrospective_id",
+    "tracker_id",
+    "trigger",
+    "summary",
+    "artifacts_reviewed",
+    "pain_points",
+    "root_causes",
+    "actions",
+    "recommended_role_changes",
+    "recommended_skill_changes",
+    "recommended_validation_changes",
+    "status"
+  ],
+  "properties": {
+    "retrospective_id": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "tracker_id": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "trigger": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "summary": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "artifacts_reviewed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "pain_points": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "root_causes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "description"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "docs",
+              "skill",
+              "validation",
+              "role",
+              "process"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "artifact": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "recommended_role_changes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommended_skill_changes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommended_validation_changes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "accepted",
+        "deferred"
+      ]
+    }
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Handoff Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "handoff_id",
+    "tracker_id",
+    "task",
+    "from_role",
+    "to_role",
+    "reason",
+    "status",
+    "read_set",
+    "write_scope",
+    "artifacts",
+    "validation",
+    "open_questions",
+    "risks",
+    "success_criteria"
+  ],
+  "properties": {
+    "handoff_id": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "tracker_id": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "task": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "from_role": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "to_role": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "reason": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "ready",
+        "accepted",
+        "complete"
+      ]
+    },
+    "read_set": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "write_scope": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "validation": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    },
+    "success_criteria": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "\\S"
+      }
+    }
+  }
+}

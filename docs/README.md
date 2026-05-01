@@ -23,6 +23,11 @@ Package-first commands:
 
 Legacy/manual mode remains supported as fallback.
 
+Agentic governance maintenance commands for this repository:
+
+- `npm run governance:adapters`
+- `npm run governance:adapters:check`
+
 Onboarding split:
 
 - Greenfield repos: scaffold from `templates/greenfield` (degit or GitHub Template), then run `npm run governance:bootstrap` (`degit` users run `git init` first).
@@ -42,6 +47,7 @@ Recommended ignore entries for local governance artifacts:
 
 ```gitignore
 .governance/backups/
+.governance/npm-cache/
 .governance/release-check/
 .governance/adopt-report.md
 .governance/patches/adopt.patch
@@ -56,11 +62,34 @@ Recommended ignore entries for local governance artifacts:
 - `docs/development/delivery-governance.md` - delivery rules and quality gates
 - `docs/development/release-maintenance-policy.md` - canonical release/maintenance contract (support SLA, compatibility matrix, offline install, deprecation workflow)
 - `docs/development/greenfield-template-publication-runbook.md` - manual publication process for GitHub Template distribution (operational guidance)
+- `docs/agentic/operating-model.md` - canonical vendor-neutral agentic operating model
+- `docs/agentic/adapter-strategy.md` - canonical adapter projection strategy
+- `docs/agentic/migration.md` - canonical migration notes for the agentic layer
 - `.agent/workflows/governance.md` - workflow rules and stop conditions
 - `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)` - canonical governance terminology
 - `.agent/workflows/requirements-workshop.md` - feature requirements workshop workflow
 - `.agent/workflows/merge-pr.md` - merge-by-command protocol
 - `docs/tracker.md` - tracker used by this repo
+
+## Canonical Registries and Schemas
+
+- `governance/agent-roles.json` - canonical role registry
+- `governance/agent-skills.json` - canonical skill registry
+- `governance/agent-adapters.json` - canonical adapter registry
+- `schemas/agent-roles.schema.json` - role registry schema
+- `schemas/agent-skills.schema.json` - skill registry schema
+- `schemas/agent-handoff.schema.json` - handoff schema
+- `schemas/agent-retrospective.schema.json` - retrospective schema
+- `schemas/agent-adapters.schema.json` - adapter registry schema
+
+## Generated Adapter Outputs
+
+- `generated/adapters/codex/AGENTS.md`
+- `generated/adapters/claude-code/CLAUDE.md`
+- `generated/adapters/cursor/.cursorrules`
+- `generated/adapters/github-copilot/copilot-instructions.md`
+- `generated/adapters/antigravity/AGENT-GOVERNANCE.md`
+- `generated/adapters/generic/AGENT-GOVERNANCE.md`
 
 ## Templates
 
@@ -80,6 +109,7 @@ Recommended ignore entries for local governance artifacts:
 
 - `docs/examples/AG-GOV-004-workshop.md` - canonical workshop example
 - `docs/examples/AG-GOV-009-workshop-adoption-examples.md` - concise workshop adoption examples for applicability, hotfix exception, and tracker evidence linkage
+- `docs/examples/agentic-example-flow.md` - end-to-end role discovery, delegation, validation, review, and retrospective example
 - `docs/requirements/AG-GOV-003/workshop.md` - workshop artifact for installable distribution v1.0 scope
 - `docs/requirements/AG-GOV-003-stage3/workshop.md` - shared workshop artifact for Stage 3 upgrade/rollback/corruption handling
 - `docs/requirements/AG-GOV-003-stage4/workshop.md` - shared workshop artifact for Stage 4 presets/wizard delivery
@@ -89,3 +119,6 @@ Recommended ignore entries for local governance artifacts:
 - `docs/requirements/AG-GOV-003-stage9/workshop.md` - shared workshop artifact for Stage 9 maintenance automation and distribution preflight
 - `docs/requirements/AG-GOV-003-stage10/workshop.md` - shared workshop artifact for Stage 10 release evidence artifacts
 - `docs/requirements/AG-GOV-003-stage11/workshop.md` - shared workshop artifact for Stage 11 controlled publish execution
+- `docs/requirements/AG-GOV-054/workshop.md` - workshop artifact for the vendor-neutral agentic governance foundation
+- `examples/handoffs/AG-GOV-054-schema-handoff.json` - handoff example artifact
+- `examples/retrospectives/AG-GOV-054-ownership-retro.json` - retrospective example artifact

@@ -6,6 +6,8 @@ This document defines delivery rules, source of truth, and local quality gates.
 
 - Tracker: `docs/tracker.md`
 - Workflows: `.agent/workflows/*.md`
+- Agentic operating model (canonical): `docs/agentic/operating-model.md`
+- Adapter strategy (canonical): `docs/agentic/adapter-strategy.md`
 - Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`
 - Terminology contract (canonical): `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)`
 - Branch protection contract (canonical): `.agent/workflows/governance.md` -> `Required Branch Protection for main`

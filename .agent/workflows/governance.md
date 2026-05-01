@@ -22,6 +22,8 @@ Before each major step, verify:
 ## Source of Truth
 
 - Tracker: `docs/tracker.md`
+- Agentic operating model: `docs/agentic/operating-model.md`
+- Adapter strategy: `docs/agentic/adapter-strategy.md`
 - Delivery governance: `docs/development/delivery-governance.md`
 
 ## Terminology Contract (Canonical)
