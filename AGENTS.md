@@ -40,7 +40,7 @@ Before starting any work, verify:
 ## Merge-by-Command Protocol
 
 When an explicit merge command is given (see `.agent/workflows/merge-pr.md`), follow
-that checklist exactly. It permits tracker finalization (`Phase=Merge, State=Complete`) pre-merge with audit evidence.
+that checklist exactly. It permits tracker finalization (`Phase=Merge, State=Complete`) pre-merge only after review evidence is verified.
 
 ## Exceptions
 

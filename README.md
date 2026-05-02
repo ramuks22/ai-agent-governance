@@ -273,16 +273,17 @@ This framework is tool-agnostic and works with any AI coding assistant that supp
 
 ## Merge-by-Command Protocol
 
-When an explicit merge command is given (e.g., "merge PR #123 to main"), follow the six-step checklist in `.agent/workflows/merge-pr.md`:
+When an explicit merge command is given (e.g., "merge PR #123 to main"), follow the seven-step checklist in `.agent/workflows/merge-pr.md`:
 
-1. **Update tracker** – Set IDs to `Phase=Merge, State=Complete`, and add `PR #<number>` evidence
-2. **Commit + push** – Push tracker updates to PR branch
-3. **Sync checklist + checks** – Ensure checklist/evidence is current and wait for required checks
-4. **Merge PR** – Merge to main
-5. **Branch cleanup** – Delete remote and local branches
-6. **Sync main** – Pull latest changes
+1. **Verify review evidence** – Confirm the PR is not draft and is approved, or has a complete review exception
+2. **Update tracker** – Set IDs to `Phase=Merge, State=Complete`, and add `PR #<number>` evidence
+3. **Commit + push** – Push tracker updates to PR branch
+4. **Sync checklist + checks** – Ensure checklist/evidence is current and wait for required checks
+5. **Merge PR** – Merge to main
+6. **Branch cleanup** – Delete remote and local branches
+7. **Sync main** – Pull latest changes
 
-This protocol permits tracker finalization (`Phase=Merge, State=Complete`) **before** merge, as a documented exception with audit evidence.
+This protocol permits tracker finalization (`Phase=Merge, State=Complete`) **before** merge only after review evidence is verified. Review exceptions satisfy governance evidence only and do not bypass protected-branch approval requirements.
 
 ## Requirements Workshop (Feature-Level Work)
 

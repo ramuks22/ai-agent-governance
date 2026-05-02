@@ -192,20 +192,23 @@ Approved exception policy (timeboxed):
 - "merge #<number> to main"
 - "push #<number> to main and merge"
 
-**Effect**: The explicit command activates the six-step checklist in
-`.agent/workflows/merge-pr.md` and permits tracker finalization (`Phase=Merge, State=Complete`) before merge.
+**Effect**: The explicit command activates the seven-step checklist in
+`.agent/workflows/merge-pr.md` and permits tracker finalization (`Phase=Merge, State=Complete`) before merge only after review evidence is verified.
 
 **Required steps** (in order):
 
-1. Update tracker IDs to `Phase=Merge, State=Complete`, and add `PR #<number>` evidence
-2. Commit + push tracker updates to the same PR branch
-3. Sync PR checklist core items and verify merge-command evidence in PR body
-4. Wait for required checks to pass (`governance` + `pr-checklist`)
-5. Merge PR to main
-6. Delete branch (remote + local), then pull + sync main locally
+1. Verify review evidence: PR is not draft and is approved, or has a complete review exception
+2. Update tracker IDs to `Phase=Merge, State=Complete`, and add `PR #<number>` evidence
+3. Commit + push tracker updates to the same PR branch
+4. Sync PR checklist core items and verify merge-command and review evidence in PR body
+5. Wait for required checks to pass (`governance` + `pr-checklist`)
+6. Merge PR to main
+7. Delete branch (remote + local), then pull + sync main locally
 
 **Evidence requirement**: PR body must contain one of the evidence forms listed in
 `.agent/workflows/merge-pr.md` -> `Evidence Requirement`.
+
+**Review evidence requirement**: `Merge-by-command` must remain unchecked until the PR is not draft and has GitHub approval (`reviewDecision=APPROVED`) or a complete `Review Exception` block. Review exceptions satisfy governance evidence only and do not bypass protected-branch approval requirements.
 
 ## Definition of Done
 
@@ -248,11 +251,12 @@ Monthly checklist (all items required):
 3. Applicability evidence format and PR-to-tracker linkage semantics match.
 4. Exception policy fields match (reason, approvers, due date, 2-business-day SLA, retroactive completion evidence).
 5. Merge-by-command trigger phrases are consistent.
-6. Merge-by-command step order is consistent.
-7. Bypass policy is consistent (`--no-verify` requires explicit user approval).
-8. Definition-of-Done criteria are consistent (workshop traceability + phase/state finalization conditions).
-9. Branch protection profile for `main` matches this document (run protection API check and compare required fields).
-10. Terminology contract conformance is validated using the deterministic commands in this file.
+6. Merge-by-command step order is consistent, with review evidence before tracker finalization.
+7. Merge-by-command review exception fields and branch-protection limitation are consistent.
+8. Bypass policy is consistent (`--no-verify` requires explicit user approval).
+9. Definition-of-Done criteria are consistent (workshop traceability + phase/state finalization conditions).
+10. Branch protection profile for `main` matches this document (run protection API check and compare required fields).
+11. Terminology contract conformance is validated using the deterministic commands in this file.
 
 Output and evidence format:
 
@@ -279,3 +283,4 @@ Scope maintenance rule:
 | Missing tracker ID (no exception)                     | BLOCK   |
 | Use `--no-verify` after failed push without approval  | BLOCK   |
 | Merge without merge-by-command evidence when required | BLOCK   |
+| Merge by command without review evidence              | BLOCK   |

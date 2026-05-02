@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const APPLICABILITY_RE = /Applicability:\s*(Required|Not Required)\s*[—-]\s*Reason:\s*(.+)/i;
 const TRACKER_ID_RE = /AG-GOV-\d+/g;
+const ALLOWED_REVIEW_EXCEPTION_CONDITIONS = new Set(['emergency', 'solo maintainer']);
 
 function unique(values) {
   return [...new Set(values)];
@@ -47,6 +48,12 @@ function getHotfixField(body, fieldPattern) {
   return match ? normalizeValue(match[1]) : '';
 }
 
+function getMarkdownSection(body, heading) {
+  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const sectionMatch = String(body || '').match(new RegExp(`^##\\s+${escapedHeading}\\s*$([\\s\\S]*?)(?=^##\\s+|(?![\\s\\S]))`, 'im'));
+  return sectionMatch ? sectionMatch[1] : '';
+}
+
 function parseHotfix(body) {
   const usedMatch = body.match(/- Hotfix Exception Used:\s*`?(Yes|No)`?/i);
   const used = usedMatch ? usedMatch[1].toLowerCase() === 'yes' : false;
@@ -79,6 +86,10 @@ function parseMergeByCommandChecklist(body) {
   }));
 }
 
+export function isMergeByCommandChecked(body) {
+  return parseMergeByCommandChecklist(body || '').some((entry) => entry.checked);
+}
+
 function hasMergeCommandForCurrentPr(body, prNumber) {
   const mergeCommandMatches = [
     ...body.matchAll(/\bmerge PR #(\d+) to main\b/gi),
@@ -109,6 +120,75 @@ function hasMergeCommandEvidence(body, prNumber) {
   return /Manual merge per governance protocol/i.test(body);
 }
 
+export function parseReviewException(body) {
+  const reviewExceptionSection = getMarkdownSection(body || '', 'Review Exception');
+  const usedMatch = reviewExceptionSection.match(/- Review Exception Used:\s*`?(Yes|No)`?/i);
+  const used = usedMatch ? usedMatch[1].toLowerCase() === 'yes' : false;
+
+  const reason = getHotfixField(reviewExceptionSection, /- Reason \(required if `Yes`\):[ \t]*(.*)$/im);
+  const approver = getHotfixField(reviewExceptionSection, /- Approver \(required if `Yes`\):[ \t]*(.*)$/im);
+  const condition = getHotfixField(reviewExceptionSection, /- Condition \(required if `Yes`, `Emergency` or `Solo Maintainer`\):[ \t]*(.*)$/im);
+  const followUpEvidence = getHotfixField(reviewExceptionSection, /- Follow-up Evidence \(required if `Yes`\):[ \t]*(.*)$/im);
+
+  const missing = [];
+  if (used) {
+    if (isEmptyValue(reason)) missing.push('Reason');
+    if (isEmptyValue(approver)) missing.push('Approver');
+    if (
+      isEmptyValue(condition) ||
+      !ALLOWED_REVIEW_EXCEPTION_CONDITIONS.has(condition.toLowerCase())
+    ) {
+      missing.push('Condition (Emergency or Solo Maintainer)');
+    }
+    if (isEmptyValue(followUpEvidence)) missing.push('Follow-up Evidence');
+  }
+
+  return {
+    used,
+    complete: used && missing.length === 0,
+    missing,
+    condition,
+  };
+}
+
+export function hasCompleteReviewException(body) {
+  return parseReviewException(body || '').complete;
+}
+
+export function validateReviewGate({ body, reviewState }) {
+  const issues = [];
+
+  if (!reviewState) {
+    issues.push('Merge-by-command checklist item cannot be checked because GitHub review state is unavailable.');
+    return issues;
+  }
+
+  if (reviewState.isDraft) {
+    issues.push('Merge-by-command checklist item cannot be checked while the PR is still draft.');
+    return issues;
+  }
+
+  if (reviewState.reviewDecision === 'APPROVED') {
+    return issues;
+  }
+
+  const reviewException = parseReviewException(body || '');
+  if (reviewException.complete) {
+    return issues;
+  }
+
+  if (reviewException.used) {
+    issues.push(`Review exception is incomplete (missing: ${reviewException.missing.join(', ')}).`);
+    return issues;
+  }
+
+  const reviewDecision = reviewState.reviewDecision || 'not available';
+  issues.push(
+    `Merge-by-command checklist item cannot be checked until review evidence exists (GitHub reviewDecision=APPROVED) or a complete Review Exception block is provided. Current reviewDecision: ${reviewDecision}.`
+  );
+  return issues;
+}
+
 function validateTrackerEvidence(trackerIds, trackerText, prNumber) {
   const issues = [];
   for (const id of trackerIds) {
@@ -127,7 +207,7 @@ function validateTrackerEvidence(trackerIds, trackerText, prNumber) {
   return issues;
 }
 
-export function validatePrChecklist({ body, trackerText, prNumber }) {
+export function validatePrChecklist({ body, trackerText, prNumber, reviewState = null }) {
   const issues = [];
   const trackerIds = extractTrackerIdsFromBody(body || '');
 
@@ -165,6 +245,10 @@ export function validatePrChecklist({ body, trackerText, prNumber }) {
     );
   }
 
+  if (mergeByCommandChecked) {
+    issues.push(...validateReviewGate({ body: body || '', reviewState }));
+  }
+
   if (trackerIds.length > 0) {
     issues.push(...validateTrackerEvidence(trackerIds, trackerText || '', prNumber));
   }
@@ -172,7 +256,77 @@ export function validatePrChecklist({ body, trackerText, prNumber }) {
   return { issues, trackerIds, applicability: applicability.value || 'Unknown' };
 }
 
-function main() {
+function parseRepositoryFullName(repositoryFullName) {
+  const [owner, repo] = String(repositoryFullName || '').split('/');
+  if (!owner || !repo) {
+    throw new Error('GITHUB_REPOSITORY must be set as owner/repo to fetch PR review state.');
+  }
+  return { owner, repo };
+}
+
+export async function fetchPullRequestReviewState({
+  owner,
+  repo,
+  prNumber,
+  token,
+  endpoint = process.env.GITHUB_GRAPHQL_URL || 'https://api.github.com/graphql',
+  fetchImpl = globalThis.fetch,
+}) {
+  if (!token) {
+    throw new Error('GITHUB_TOKEN or GITHUB_AUTH is required to fetch PR review state.');
+  }
+  if (!owner || !repo || !prNumber) {
+    throw new Error('owner, repo, and prNumber are required to fetch PR review state.');
+  }
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('fetch is unavailable for GitHub review state lookup.');
+  }
+
+  const query = `
+    query PullRequestReviewState($owner: String!, $repo: String!, $number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          isDraft
+          reviewDecision
+        }
+      }
+    }
+  `;
+
+  const response = await fetchImpl(endpoint, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      'user-agent': 'ai-agent-governance-pr-checklist',
+    },
+    body: JSON.stringify({
+      query,
+      variables: { owner, repo, number: Number(prNumber) },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub GraphQL review-state request failed: ${response.status} ${response.statusText || ''}`.trim());
+  }
+
+  const payload = await response.json();
+  if (payload.errors?.length) {
+    throw new Error(`GitHub GraphQL review-state request failed: ${payload.errors.map((error) => error.message).join('; ')}`);
+  }
+
+  const pullRequest = payload?.data?.repository?.pullRequest;
+  if (!pullRequest || typeof pullRequest.isDraft !== 'boolean') {
+    throw new Error('GitHub GraphQL review-state response was malformed.');
+  }
+
+  return {
+    isDraft: pullRequest.isDraft,
+    reviewDecision: pullRequest.reviewDecision || null,
+  };
+}
+
+async function main() {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!eventPath) {
     console.error('[pr-checklist] GITHUB_EVENT_PATH is required.');
@@ -186,11 +340,33 @@ function main() {
     process.exit(0);
   }
 
+  const baseRef = pullRequest.base?.ref;
+  if (baseRef && baseRef !== 'main') {
+    console.log(`[pr-checklist] PR targets ${baseRef}; skipping main-branch governance checklist.`);
+    process.exit(0);
+  }
+
   const body = pullRequest.body || '';
   const prNumber = pullRequest.number;
   const trackerText = readFileSync('docs/tracker.md', 'utf8');
+  let reviewState = null;
 
-  const result = validatePrChecklist({ body, trackerText, prNumber });
+  if (isMergeByCommandChecked(body)) {
+    try {
+      const { owner, repo } = parseRepositoryFullName(process.env.GITHUB_REPOSITORY);
+      const reviewStateRequest = {
+        owner,
+        repo,
+        prNumber,
+      };
+      reviewStateRequest['token'] = process.env.GITHUB_TOKEN || process.env.GITHUB_AUTH;
+      reviewState = await fetchPullRequestReviewState(reviewStateRequest);
+    } catch (error) {
+      console.error(`[pr-checklist] Review state lookup failed: ${error.message}`);
+    }
+  }
+
+  const result = validatePrChecklist({ body, trackerText, prNumber, reviewState });
 
   if (result.issues.length > 0) {
     console.error('[pr-checklist] Governance-core checklist validation failed:');
@@ -204,5 +380,8 @@ function main() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  main().catch((error) => {
+    console.error(`[pr-checklist] ${error.message}`);
+    process.exit(1);
+  });
 }
