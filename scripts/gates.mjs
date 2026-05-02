@@ -11,10 +11,41 @@ function fail(message) {
   process.exit(1);
 }
 
+function buildCommandEnv() {
+  const env = { ...process.env };
+  const gitHookEnvKeys = [
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+    'GIT_COMMON_DIR',
+    'GIT_CONFIG_COUNT',
+    'GIT_CONFIG_PARAMETERS',
+    'GIT_DIR',
+    'GIT_INDEX_FILE',
+    'GIT_INTERNAL_SUPER_PREFIX',
+    'GIT_NAMESPACE',
+    'GIT_OBJECT_DIRECTORY',
+    'GIT_PREFIX',
+    'GIT_QUARANTINE_PATH',
+    'GIT_WORK_TREE',
+  ];
+
+  for (const key of gitHookEnvKeys) {
+    delete env[key];
+  }
+
+  for (const key of Object.keys(env)) {
+    if (/^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(key)) {
+      delete env[key];
+    }
+  }
+
+  return env;
+}
+
 function runCommand(command) {
   const result = spawnSync(command, {
     stdio: 'inherit',
     shell: true,
+    env: buildCommandEnv(),
   });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
