@@ -724,6 +724,81 @@ test('adopt --tracker-path resolves custom tracker mapping and upgrade preserves
   assert.doesNotMatch(upgrade.stdout, /docs\/tracker\.md/);
   const configAfterUpgrade = JSON.parse(readFileSync(path.join(repo, 'governance.config.json'), 'utf8'));
   assert.equal(configAfterUpgrade.tracker.path, 'docs/tracker.json');
+  const agents = readFileSync(path.join(repo, 'AGENTS.md'), 'utf8');
+  assert.match(agents, /docs\/tracker\.json/);
+  assert.doesNotMatch(agents, /docs\/tracker\.md/);
+  const deliveryGovernance = readFileSync(path.join(repo, 'docs', 'development', 'delivery-governance.md'), 'utf8');
+  assert.match(deliveryGovernance, /docs\/tracker\.json/);
+  assert.doesNotMatch(deliveryGovernance, /docs\/tracker\.md/);
+});
+
+test('adopt customize then upgrade force preserves known repo-owned config and rendered tracker conventions', () => {
+  const repo = setupRepo('gov-cli-upgrade-preserve-known-customizations');
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(path.join(repo, 'task.md'), '# Tasks\n', 'utf8');
+  commitAll(repo, 'chore: baseline task tracker');
+
+  const adopt = run(['adopt', '--preset', 'generic', '--tracker-path', 'task.md', '--apply'], repo);
+  assert.equal(adopt.status, 0, `${adopt.stdout}\n${adopt.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.tracker = {
+    path: 'task.md',
+    idPattern: '^#\\d+$',
+    allowedPrefixes: [],
+  };
+  config.gates = {
+    preCommit: ['npm run custom:format', 'npm run custom:lint'],
+    prePush: ['npm run custom:test', 'npm run custom:build'],
+  };
+  config.ci = { preCiCommand: 'npm run codegen' };
+  config.branchProtection = {
+    blockDirectPush: ['main', 'master', 'production'],
+    branchNamePattern: '^(feat|fix|codex)\\/[a-z0-9._-]+$',
+  };
+  config.node = { minVersion: '22.0.0' };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const upgrade = run(['upgrade', '--force'], repo);
+  assert.equal(upgrade.status, 0, `${upgrade.stdout}\n${upgrade.stderr}`);
+
+  const updated = JSON.parse(readFileSync(configPath, 'utf8'));
+  assert.deepEqual(updated.tracker, config.tracker);
+  assert.deepEqual(updated.gates, config.gates);
+  assert.deepEqual(updated.ci, config.ci);
+  assert.deepEqual(updated.branchProtection, config.branchProtection);
+  assert.deepEqual(updated.node, config.node);
+
+  const exampleConfig = JSON.parse(readFileSync(path.join(repo, 'governance.config.example.json'), 'utf8'));
+  assert.deepEqual(exampleConfig.tracker, config.tracker);
+  assert.deepEqual(exampleConfig.gates, config.gates);
+  assert.deepEqual(exampleConfig.ci, config.ci);
+  assert.deepEqual(exampleConfig.branchProtection, config.branchProtection);
+  assert.deepEqual(exampleConfig.node, config.node);
+
+  for (const relPath of [
+    'AGENTS.md',
+    '.agent/workflows/governance.md',
+    '.agent/workflows/requirements-workshop.md',
+    '.agent/workflows/merge-pr.md',
+    'docs/development/delivery-governance.md',
+  ]) {
+    const content = readFileSync(path.join(repo, relPath), 'utf8');
+    assert.match(content, /task\.md/);
+    assert.doesNotMatch(content, /docs\/tracker\.md/);
+  }
+
+  const trackerTemplate = readFileSync(path.join(repo, 'docs', 'templates', 'tracker-template.md'), 'utf8');
+  assert.match(trackerTemplate, /\| #1\s+\|/);
+  assert.doesNotMatch(trackerTemplate, /AG-GOV-001/);
+  const workshopTemplate = readFileSync(path.join(repo, 'docs', 'templates', 'requirements-workshop-template.md'), 'utf8');
+  assert.match(workshopTemplate, /Tracker ID: `#1`/);
+  assert.doesNotMatch(workshopTemplate, /AG-XXX-000/);
 });
 
 test('adopt preserves ci.preCiCommand when regenerating config', () => {
@@ -764,6 +839,37 @@ test('upgrade preserves ci.preCiCommand when rewriting managed config', () => {
   assert.deepEqual(updated.ci, { preCiCommand: 'npm run codegen' });
 });
 
+test('upgrade force preserves known reusable workflow command customizations only', () => {
+  const repo = setupRepo('gov-cli-upgrade-preserve-reusable-workflow');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const workflowPath = path.join(repo, '.github', 'workflows', 'governance-ci-reusable.yml');
+  const original = readFileSync(workflowPath, 'utf8');
+  const customized = original
+    .replace("default: '20'", "default: '22'")
+    .replace("default: 'npm ci'", "default: 'npm install --ignore-scripts'")
+    .replace(
+      'run: npx --yes @ramuks22/ai-agent-governance@${{ inputs.package_version }} check',
+      'run: ./scripts/governance-check-wrapper.sh'
+    )
+    .replace(
+      'run: npx --yes @ramuks22/ai-agent-governance@${{ inputs.package_version }} ci-check --gate all',
+      'run: ./scripts/governance-ci-wrapper.sh'
+    );
+  writeFileSync(workflowPath, customized, 'utf8');
+
+  const result = run(['upgrade', '--force'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+
+  const updated = readFileSync(workflowPath, 'utf8');
+  assert.match(updated, /default: 'npm install --ignore-scripts'/);
+  assert.match(updated, /run: \.\/scripts\/governance-check-wrapper\.sh/);
+  assert.match(updated, /run: \.\/scripts\/governance-ci-wrapper\.sh/);
+  assert.match(updated, /default: '20'/);
+  assert.doesNotMatch(updated, /default: '22'/);
+});
+
 test('adopt fails safely when existing config JSON is invalid and overrides cannot be preserved', () => {
   const repo = setupRepo('gov-cli-adopt-invalid-json-preserve');
   writeFileSync(
@@ -791,6 +897,24 @@ test('upgrade fails safely when existing preCiCommand is invalid', () => {
   const result = run(['upgrade', '--force'], repo);
   assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stderr, /Cannot preserve ci\.preCiCommand/);
+});
+
+test('upgrade fails safely before rewrite when preserved config shape is invalid', () => {
+  const repo = setupRepo('gov-cli-upgrade-invalid-preserved-config');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const agentsPath = path.join(repo, 'AGENTS.md');
+  const agentsBefore = readFileSync(agentsPath, 'utf8');
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.tracker.allowedPrefixes = 'AG';
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['upgrade', '--force'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Invalid preserved generation overrides/);
+  assert.equal(readFileSync(agentsPath, 'utf8'), agentsBefore);
 });
 
 test('adopt report-only keeps blockers visible even when --force is provided', () => {

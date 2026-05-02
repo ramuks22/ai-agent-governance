@@ -405,6 +405,9 @@ CLI equivalent (package mode):
 
 - `upgrade` is conflict-aware by default and writes no files when conflicts are found.
 - Use `--force` to overwrite conflicts; a backup snapshot is created before writes.
+- During `upgrade` and forced `adopt`, generated config preserves supported repo-owned sections from `governance.config.json`: `tracker`, `gates`, `ci`, `branchProtection`, and `node`.
+- Managed docs/templates are rendered from the preserved tracker settings, so custom tracker paths such as `task.md` remain the documented source of truth.
+- `upgrade --force` does not promise to preserve arbitrary edits inside managed blocks; place durable local prose outside managed blocks or keep it in repo-owned files.
 - Use `--patch` (or `--patch=<path>`) to write deterministic patch output for review.
 - `adopt` is report-first by default and writes `.governance/adopt-report.md` plus `.governance/patches/adopt.patch`.
 - `adopt --apply` writes managed artifacts only when blockers are resolved; blocked migrations exit with code `2`.
