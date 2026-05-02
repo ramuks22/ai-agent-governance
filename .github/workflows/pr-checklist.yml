@@ -3,7 +3,9 @@ name: PR Checklist
 on:
   pull_request:
     branches: [main]
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft]
+  pull_request_review:
+    types: [submitted, dismissed]
 
 jobs:
   pr-checklist:
@@ -21,4 +23,6 @@ jobs:
           node-version-file: '.nvmrc'
 
       - name: Validate governance-core PR checklist
+        env:
+          GITHUB_AUTH: ${{ github.token }}
         run: node scripts/validate-pr-checklist.mjs

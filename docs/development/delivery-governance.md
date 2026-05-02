@@ -71,15 +71,16 @@ If a `git push` fails and you intend to rerun the push using `--no-verify`:
 When an explicit merge command is given (e.g., "merge PR #<number> to main",
 "merge #<number> to main", "push #<number> to main and merge"):
 
-1. **Tracker finalization**: Mark associated tracker IDs as `Phase=Merge, State=Complete`, and add `PR #<number>` evidence.
-   This explicit command authorizes finalization before merge.
-2. **Commit tracker updates** to the PR branch.
-3. **Sync PR checklist + evidence**: ensure governance-core checklist items and merge-command evidence are current in PR body.
-4. **Wait for checks**: confirm required checks are green via `gh pr checks <number> --watch`.
-5. **Merge** the PR.
-6. **Cleanup**: Delete branch (remote + local), pull main.
+1. **Review evidence**: confirm the PR is not draft and has GitHub approval, or a complete review exception is recorded.
+2. **Tracker finalization**: Mark associated tracker IDs as `Phase=Merge, State=Complete`, and add `PR #<number>` evidence.
+   The explicit command authorizes finalization before merge only after review evidence is verified.
+3. **Commit tracker updates** to the PR branch.
+4. **Sync PR checklist + evidence**: ensure governance-core checklist items, merge-command evidence, and review evidence are current in PR body.
+5. **Wait for checks**: confirm required checks are green via `gh pr checks <number> --watch`.
+6. **Merge** the PR.
+7. **Cleanup**: Delete branch (remote + local), pull main.
 
-**Auditability**: The merge command must be quoted or linked in the PR body.
+**Auditability**: The merge command must be quoted or linked in the PR body. Review exceptions satisfy governance evidence only and do not bypass protected-branch approval requirements.
 
 ## Definition of Done
 
@@ -90,4 +91,5 @@ Delivery summary (for quick scanning):
 
 - Use the canonical checklist before finalization.
 - Applicability evidence must be present in PR body, and tracker evidence must reference that PR.
+- Review evidence must be verified before tracker finalization starts.
 - Final tracker state must be `Phase=Merge, State=Complete` with PR evidence (or an explicitly approved exception).

@@ -1,6 +1,13 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const gatesPath = path.resolve(__dirname, '..', 'gates.mjs');
 
 /**
  * Tests for gates.mjs logic
@@ -322,5 +329,49 @@ describe('Push Refspec Parsing', () => {
     it('should parse local branch from refspec', () => {
         const line = 'refs/heads/feat/update-governance abc123 refs/heads/main def456';
         assert.strictEqual(parseLocalRefspec(line), 'feat/update-governance');
+    });
+});
+
+describe('Hook Command Environment', () => {
+    it('does not leak Git hook internals into configured gate commands', () => {
+        const repo = mkdtempSync(path.join(tmpdir(), 'gov-gate-env-'));
+        const init = spawnSync('git', ['init', '-q'], { cwd: repo, encoding: 'utf8' });
+        assert.strictEqual(init.status, 0, init.stderr);
+
+        writeFileSync(
+            path.join(repo, 'governance.config.json'),
+            `${JSON.stringify({
+                configVersion: '1.0',
+                tracker: {
+                    path: 'docs/tracker.md',
+                    idPattern: '^[A-Z]+-[A-Z]+-\\d{3}$',
+                    allowedPrefixes: ['AG'],
+                },
+                gates: {
+                    preCommit: [],
+                    prePush: [
+                        `${process.execPath} -e "if (process.env.GIT_DIR) process.exit(7)"`,
+                    ],
+                },
+                branchProtection: {
+                    blockDirectPush: [],
+                    branchNamePattern: '.*',
+                },
+            }, null, 2)}\n`,
+            'utf8'
+        );
+
+        const result = spawnSync(process.execPath, [gatesPath, 'pre-push'], {
+            cwd: repo,
+            encoding: 'utf8',
+            env: {
+                ...process.env,
+                CI: 'false',
+                GIT_DIR: path.join(repo, '.git'),
+            },
+            input: '',
+        });
+
+        assert.strictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
     });
 });

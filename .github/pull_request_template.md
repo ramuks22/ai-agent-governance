@@ -17,6 +17,14 @@
 - Due Date (required if `Yes`, `YYYY-MM-DD`):
 - Retroactive Completion Evidence (required if `Yes`):
 
+## Review Exception
+
+- Review Exception Used: `Yes|No`
+- Reason (required if `Yes`):
+- Approver (required if `Yes`):
+- Condition (required if `Yes`, `Emergency` or `Solo Maintainer`):
+- Follow-up Evidence (required if `Yes`):
+
 ## Non-negotiable checklist
 
 - [ ] Tracker ID included and tracker phase/state updated
@@ -29,4 +37,4 @@
 - [ ] Relevant unit tests pass (frontend + backend as applicable)
 - [ ] Build succeeds and bundle budgets pass (if applicable)
 - [ ] A11y considered for UI changes (keyboard + screen reader basics)
-- [ ] **Merge-by-command** (required for AI-assisted merges): leave unchecked until a quoted merge command, matching GitHub issuecomment link, or manual merge note is added
+- [ ] **Merge-by-command** (required for AI-assisted merges): leave unchecked until merge command evidence and review evidence are both present
