@@ -31,6 +31,7 @@ const SCHEMA_PATH = 'governance.config.schema.json';
 const EXAMPLE_CONFIG_PATH = 'governance.config.example.json';
 const TRACKER_TEMPLATE_PATH = 'docs/templates/tracker-template.md';
 const TRACKER_PATH = 'docs/tracker.md';
+const REUSABLE_GOVERNANCE_WORKFLOW_PATH = '.github/workflows/governance-ci-reusable.yml';
 const MANIFEST_PATH = '.governance/manifest.json';
 const BACKUP_INDEX_PATH = '.governance/backups/index.json';
 const ADOPT_REPORT_PATH = '.governance/adopt-report.md';
@@ -161,10 +162,18 @@ const ARTIFACT_FILES = [
   'docs/templates/requirements-workshop-template.md',
   '.github/pull_request_template.md',
   '.github/workflows/governance-ci.yml',
-  '.github/workflows/governance-ci-reusable.yml',
-  EXAMPLE_CONFIG_PATH,
+  REUSABLE_GOVERNANCE_WORKFLOW_PATH,
   SCHEMA_PATH,
 ];
+
+const PRESERVED_CONFIG_SECTIONS = ['tracker', 'gates', 'ci', 'branchProtection', 'node'];
+const TRACKER_RENDERED_ARTIFACTS = new Set([
+  'AGENTS.md',
+  '.agent/workflows/governance.md',
+  '.agent/workflows/requirements-workshop.md',
+  '.agent/workflows/merge-pr.md',
+  'docs/development/delivery-governance.md',
+]);
 
 const RELEASE_CHECK_METADATA = {
   'maintenance.policy-file': {
@@ -893,10 +902,32 @@ function readConfiguredTrackerPath(configPath = CONFIG_PATH) {
   return normalizeRepoRelativePath(trackerPath.trim());
 }
 
+function cloneJson(value) {
+  if (value === undefined) return undefined;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function validatePreservedConfigOverrides(config, configPath) {
+  const ciConfig = config.ci;
+  if (ciConfig !== undefined) {
+    if (!ciConfig || typeof ciConfig !== 'object' || Array.isArray(ciConfig)) {
+      fail(`✖ Cannot preserve ci.preCiCommand from ${configPath}; expected "ci" to be an object.`);
+    }
+
+    const preCiCommand = ciConfig.preCiCommand;
+    if (preCiCommand !== undefined && (typeof preCiCommand !== 'string' || !preCiCommand.trim())) {
+      fail(`✖ Cannot preserve ci.preCiCommand from ${configPath}; expected a non-empty string.`);
+    }
+  }
+
+  validateConfigObject(config, `preserved generation overrides from ${configPath}`, sourcePath(SCHEMA_PATH));
+}
+
 function readConfiguredGenerationOverrides(configPath = CONFIG_PATH) {
   const configFile = targetPath(configPath);
   if (!existsSync(configFile)) {
     return {
+      configSections: {},
       trackerPath: '',
       preCiCommand: '',
     };
@@ -907,26 +938,20 @@ function readConfiguredGenerationOverrides(configPath = CONFIG_PATH) {
     fail(`✖ Cannot preserve generated config overrides from ${configPath}; fix invalid JSON before rerunning adopt or upgrade.`);
   }
 
-  const trackerPath = readConfiguredTrackerPath(configPath);
-  const ciConfig = config.ci;
-  if (ciConfig === undefined) {
-    return { trackerPath, preCiCommand: '' };
-  }
-  if (!ciConfig || typeof ciConfig !== 'object' || Array.isArray(ciConfig)) {
-    fail(`✖ Cannot preserve ci.preCiCommand from ${configPath}; expected "ci" to be an object.`);
-  }
+  validatePreservedConfigOverrides(config, configPath);
 
-  const preCiCommand = ciConfig.preCiCommand;
-  if (preCiCommand === undefined) {
-    return { trackerPath, preCiCommand: '' };
-  }
-  if (typeof preCiCommand !== 'string' || !preCiCommand.trim()) {
-    fail(`✖ Cannot preserve ci.preCiCommand from ${configPath}; expected a non-empty string.`);
+  const trackerPath = readConfiguredTrackerPath(configPath);
+  const configSections = {};
+  for (const sectionName of PRESERVED_CONFIG_SECTIONS) {
+    if (config[sectionName] !== undefined) {
+      configSections[sectionName] = cloneJson(config[sectionName]);
+    }
   }
 
   return {
+    configSections,
     trackerPath,
-    preCiCommand: preCiCommand.trim(),
+    preCiCommand: typeof config.ci?.preCiCommand === 'string' ? config.ci.preCiCommand.trim() : '',
   };
 }
 
@@ -1287,27 +1312,160 @@ function validateConfigObject(config, label = 'config', schemaFile = targetPath(
   }
 }
 
-function buildGeneratedConfigContent(preset, overrides = {}) {
+function buildGeneratedConfigObject(preset, overrides = {}) {
   const generated = JSON.parse(JSON.stringify(PRESETS[preset]));
+  for (const sectionName of PRESERVED_CONFIG_SECTIONS) {
+    if (overrides.configSections?.[sectionName] !== undefined) {
+      generated[sectionName] = cloneJson(overrides.configSections[sectionName]);
+    }
+  }
+
+  generated.configVersion = PRESETS[preset].configVersion;
   if (overrides.trackerPath) {
+    generated.tracker ||= {};
     generated.tracker.path = overrides.trackerPath;
   }
-  if (overrides.preCiCommand) {
+  if (overrides.preCiCommand && !overrides.configSections?.ci) {
     generated.ci = { preCiCommand: overrides.preCiCommand };
   }
   validateConfigObject(generated, 'generated config', sourcePath(SCHEMA_PATH));
+  return generated;
+}
+
+function buildGeneratedConfigContent(preset, overrides = {}) {
+  const generated = buildGeneratedConfigObject(preset, overrides);
   return `${JSON.stringify(generated, null, 2)}\n`;
+}
+
+function buildTrackerExampleId(trackerConfig = {}) {
+  const pattern = trackerConfig.idPattern;
+  let matcher = null;
+  if (typeof pattern === 'string' && pattern.trim()) {
+    try {
+      matcher = new RegExp(pattern);
+    } catch {
+      matcher = null;
+    }
+  }
+
+  if (!matcher || matcher.test('#1')) {
+    return '#1';
+  }
+
+  const firstPrefix = Array.isArray(trackerConfig.allowedPrefixes)
+    ? trackerConfig.allowedPrefixes.find((prefix) => typeof prefix === 'string' && prefix.trim())
+    : '';
+  if (!firstPrefix) return '<TRACKER-ID>';
+
+  const prefix = firstPrefix.trim();
+  const candidates = [`${prefix}-GOV-001`, `${prefix}-001`, prefix];
+  return candidates.find((candidate) => matcher.test(candidate)) || `${prefix}-001`;
+}
+
+function buildGenerationContext(options) {
+  const config = buildGeneratedConfigObject(options.preset, options.generatedOverrides || {});
+  return {
+    config,
+    trackerPath: config.tracker?.path || TRACKER_PATH,
+    trackerExampleId: buildTrackerExampleId(config.tracker || {}),
+  };
+}
+
+function renderTrackerReferences(content, context) {
+  if (!context.trackerPath || context.trackerPath === TRACKER_PATH) return content;
+  return content.split(TRACKER_PATH).join(context.trackerPath);
+}
+
+function renderTemplateExamples(relPath, content, context) {
+  if (relPath === TRACKER_TEMPLATE_PATH) {
+    return content.split('AG-GOV-001').join(context.trackerExampleId);
+  }
+
+  if (relPath === 'docs/templates/requirements-workshop-template.md') {
+    return content.split('AG-XXX-000').join(context.trackerExampleId);
+  }
+
+  return content;
+}
+
+function extractReusableWorkflowPreservedFields(existingContent) {
+  if (!existingContent) return {};
+  const fields = {};
+  const installMatch = existingContent.match(/install_command:[\s\S]*?\n\s+default:\s*['"]?([^\n'"]+)['"]?/);
+  if (installMatch?.[1]?.trim()) {
+    fields.installCommandDefault = installMatch[1].trim();
+  }
+
+  const governanceCheckMatch = existingContent.match(/- name: Governance Check\s*\n\s*run:\s*([^\n]+)/);
+  if (governanceCheckMatch?.[1]?.trim()) {
+    fields.governanceCheckCommand = governanceCheckMatch[1].trim();
+  }
+
+  const ciCheckMatch = existingContent.match(/- name: CI Check \(pre-commit \+ pre-push gates\)\s*\n\s*run:\s*([^\n]+)/);
+  if (ciCheckMatch?.[1]?.trim()) {
+    fields.ciCheckCommand = ciCheckMatch[1].trim();
+  }
+
+  return fields;
+}
+
+function applyReusableWorkflowPreservedFields(content, fields = {}) {
+  let rendered = content;
+  if (fields.installCommandDefault) {
+    rendered = rendered.replace(
+      /(install_command:[\s\S]*?\n\s+default:\s*)['"]?[^\n'"]+['"]?/,
+      `$1'${fields.installCommandDefault}'`
+    );
+  }
+  if (fields.governanceCheckCommand) {
+    rendered = rendered.replace(
+      /(- name: Governance Check\s*\n\s*run:\s*)[^\n]+/,
+      `$1${fields.governanceCheckCommand}`
+    );
+  }
+  if (fields.ciCheckCommand) {
+    rendered = rendered.replace(
+      /(- name: CI Check \(pre-commit \+ pre-push gates\)\s*\n\s*run:\s*)[^\n]+/,
+      `$1${fields.ciCheckCommand}`
+    );
+  }
+  return rendered;
+}
+
+function renderManagedArtifactContent(relPath, content, context) {
+  let rendered = content;
+  if (TRACKER_RENDERED_ARTIFACTS.has(relPath)) {
+    rendered = renderTrackerReferences(rendered, context);
+  }
+  rendered = renderTemplateExamples(relPath, rendered, context);
+
+  if (relPath === REUSABLE_GOVERNANCE_WORKFLOW_PATH) {
+    const existingPath = targetPath(relPath);
+    const preservedFields = existsSync(existingPath)
+      ? extractReusableWorkflowPreservedFields(readFileSync(existingPath, 'utf8'))
+      : {};
+    rendered = applyReusableWorkflowPreservedFields(rendered, preservedFields);
+  }
+
+  return rendered;
 }
 
 function collectManagedItems(options) {
   const files = [];
+  const generationContext = options.preset
+    ? buildGenerationContext(options)
+    : {
+      config: null,
+      trackerPath: TRACKER_PATH,
+      trackerExampleId: 'AG-GOV-001',
+    };
 
   for (const relPath of ARTIFACT_FILES) {
     const src = sourcePath(relPath);
     files.push({
       relPath,
       source: 'package',
-      content: readFileSync(src, 'utf8'),
+      content: renderManagedArtifactContent(relPath, readFileSync(src, 'utf8'), generationContext),
       stage: 'copy-artifact',
       strategy: strategyForPath(relPath),
     });
@@ -1318,12 +1476,20 @@ function collectManagedItems(options) {
   }
 
   if (!options.skipGeneratedConfig) {
+    const generatedConfigContent = buildGeneratedConfigContent(options.preset, options.generatedOverrides);
     files.push({
       relPath: CONFIG_PATH,
       source: 'generated',
-      content: buildGeneratedConfigContent(options.preset, options.generatedOverrides),
+      content: generatedConfigContent,
       stage: 'generate-config',
       strategy: strategyForPath(CONFIG_PATH),
+    });
+    files.push({
+      relPath: EXAMPLE_CONFIG_PATH,
+      source: 'generated',
+      content: generatedConfigContent,
+      stage: 'generate-config',
+      strategy: strategyForPath(EXAMPLE_CONFIG_PATH),
     });
   }
 
