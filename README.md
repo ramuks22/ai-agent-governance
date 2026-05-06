@@ -365,13 +365,19 @@ jobs:
   governance:
     uses: ramuks22/ai-agent-governance/.github/workflows/governance-ci-reusable.yml@<PINNED_TAG_OR_SHA>
     with:
-      package_version: "<PINNED_PACKAGE_VERSION>"
       install_command: "npm ci"
 ```
 
-### GitLab / Bitbucket (Pinned Version Commands)
+The reusable workflow runs the governance CLI from the caller repository's installed dependencies with `npx --no-install ai-governance`.
+Install the package in the caller repository before CI runs, either from npm or from a pinned GitHub dependency:
 
-Use a pinned package version in pipeline commands:
+```bash
+npm install -D github:ramuks22/ai-agent-governance#<PINNED_TAG_OR_SHA>
+```
+
+### Optional Direct Pinned Package Commands
+
+For GitLab, Bitbucket, or custom pipelines that do not use the reusable workflow, you may invoke a pinned package version directly:
 
 ```bash
 npx --yes @ramuks22/ai-agent-governance@<PINNED_PACKAGE_VERSION> check

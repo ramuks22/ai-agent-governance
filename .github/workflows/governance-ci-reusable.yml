@@ -3,10 +3,6 @@ name: Governance CI Reusable
 on:
   workflow_call:
     inputs:
-      package_version:
-        description: Pinned @ramuks22/ai-agent-governance package version (for example 1.1.0)
-        required: true
-        type: string
       node_version:
         description: Node version for CI runtime
         required: false
@@ -32,7 +28,7 @@ jobs:
         run: ${{ inputs.install_command }}
 
       - name: Governance Check
-        run: npx --yes @ramuks22/ai-agent-governance@${{ inputs.package_version }} check
+        run: npx --no-install ai-governance check
 
       - name: CI Check (pre-commit + pre-push gates)
-        run: npx --yes @ramuks22/ai-agent-governance@${{ inputs.package_version }} ci-check --gate all
+        run: npx --no-install ai-governance ci-check --gate all
