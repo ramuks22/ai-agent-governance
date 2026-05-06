@@ -5,6 +5,7 @@ dist/
 .env
 .env.*
 .governance/backups/
+.governance/npm-cache/
 .governance/release-check/
 .governance/adopt-report.md
 .governance/patches/adopt.patch

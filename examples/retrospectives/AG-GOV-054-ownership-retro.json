@@ -1,0 +1,39 @@
+{
+  "retrospective_id": "AG-GOV-054-ownership-retro",
+  "tracker_id": "AG-GOV-054",
+  "trigger": "ownership-conflict-avoided",
+  "summary": "The task initially risked mixing canonical doc ownership with generated adapter ownership. The issue was resolved by creating bounded writable roles and validating overlaps.",
+  "artifacts_reviewed": [
+    "docs/agentic/operating-model.md",
+    "governance/agent-roles.json",
+    "examples/handoffs/AG-GOV-054-schema-handoff.json"
+  ],
+  "pain_points": [
+    "It was not obvious where canonical doc ownership ended and generated adapter ownership began."
+  ],
+  "root_causes": [
+    "The repository previously lacked an explicit role registry and overlap validation."
+  ],
+  "actions": [
+    {
+      "type": "skill",
+      "description": "Use the delegation-planning skill before parallelizing work with multiple writable scopes.",
+      "artifact": "governance/agent-skills.json"
+    },
+    {
+      "type": "validation",
+      "description": "Fail governance validation when writable owned paths overlap.",
+      "artifact": "scripts/agentic.mjs"
+    }
+  ],
+  "recommended_role_changes": [
+    "No new role is required; bounded ownership is sufficient."
+  ],
+  "recommended_skill_changes": [
+    "Keep delegation-planning as the default response before proposing a new role."
+  ],
+  "recommended_validation_changes": [
+    "Keep adapter drift and writable ownership overlap checks active in governance validation."
+  ],
+  "status": "accepted"
+}

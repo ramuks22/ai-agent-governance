@@ -1,0 +1,37 @@
+{
+  "handoff_id": "AG-GOV-054-schema-handoff",
+  "tracker_id": "AG-GOV-054",
+  "task": "Update agentic schemas and registries after the canonical operating-model docs are stable.",
+  "from_role": "governance-designer",
+  "to_role": "schema-steward",
+  "reason": "Canonical documentation is complete and the schema boundary can now be encoded safely.",
+  "status": "ready",
+  "read_set": [
+    "docs/agentic/operating-model.md",
+    "docs/agentic/adapter-strategy.md",
+    "docs/requirements/AG-GOV-054/workshop.md"
+  ],
+  "write_scope": [
+    "schemas/**",
+    "governance/**",
+    "governance.config.schema.json"
+  ],
+  "artifacts": [
+    "docs/requirements/AG-GOV-054/workshop.md"
+  ],
+  "validation": [
+    "npm run governance:check",
+    "node --test scripts/__tests__/agentic.test.mjs"
+  ],
+  "open_questions": [
+    "Should future adapterGenerationMode values include template-only for partially supported tools?"
+  ],
+  "risks": [
+    "Validation will fail if writable ownership patterns overlap across example roles."
+  ],
+  "success_criteria": [
+    "Schemas validate",
+    "Registries validate",
+    "No writable ownership overlap remains"
+  ]
+}

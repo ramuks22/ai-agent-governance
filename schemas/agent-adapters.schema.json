@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Adapter Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "registryVersion",
+    "adapters"
+  ],
+  "properties": {
+    "registryVersion": {
+      "type": "string"
+    },
+    "adapters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "target",
+          "output_path",
+          "format",
+          "tool_notes",
+          "limitations"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "target": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "output_path": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "plain-text"
+            ]
+          },
+          "tool_notes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          }
+        }
+      }
+    }
+  }
+}

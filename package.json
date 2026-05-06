@@ -17,6 +17,8 @@
     "governance:release-check": "node scripts/governance-check.mjs --release-check --scope all",
     "governance:release-publish": "node scripts/governance-check.mjs --release-publish --out-dir .governance/release-check",
     "governance:doctor": "node scripts/governance-check.mjs --doctor",
+    "governance:adapters": "node scripts/generate-agentic-adapters.mjs --write",
+    "governance:adapters:check": "node scripts/generate-agentic-adapters.mjs --check",
     "governance:init": "node scripts/governance-check.mjs --init",
     "gate:precommit": "node scripts/gates.mjs pre-commit",
     "gate:prepush": "node scripts/gates.mjs pre-push",
