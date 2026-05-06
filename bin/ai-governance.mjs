@@ -24,6 +24,7 @@ Commands:
 
 Examples:
   npx @ramuks22/ai-agent-governance init --preset node-npm-cjs --hook-strategy auto
+  npx @ramuks22/ai-agent-governance init --preset generic-strict --hook-strategy auto
   npx @ramuks22/ai-agent-governance init --wizard --hook-strategy auto
   npx @ramuks22/ai-agent-governance check
   npx @ramuks22/ai-agent-governance ci-check --gate all

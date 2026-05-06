@@ -29,6 +29,31 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 const TARGET_ROOT = process.cwd();
 const PACKAGE_NAME = '@ramuks22/ai-agent-governance';
+const GENERIC_SELF_CHECK_COMMAND = `node ./node_modules/${PACKAGE_NAME}/bin/ai-governance.mjs check`;
+const LEGACY_GENERIC_NOOP_GATES = {
+  preCommit: [
+    'npm run -s governance:check',
+    `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs format:check`,
+    `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs lint`,
+  ],
+  prePush: [
+    'npm run -s governance:check',
+    `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs test`,
+    `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs build`,
+  ],
+};
+const GENERIC_STRICT_GATES = {
+  preCommit: [
+    GENERIC_SELF_CHECK_COMMAND,
+    `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs format:check`,
+    `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs lint`,
+  ],
+  prePush: [
+    GENERIC_SELF_CHECK_COMMAND,
+    `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs test`,
+    `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs build`,
+  ],
+};
 
 const CONFIG_PATH = 'governance.config.json';
 const SCHEMA_PATH = 'governance.config.schema.json';
@@ -146,17 +171,28 @@ const PRESETS = {
       allowedPrefixes: ['AG'],
     },
     gates: {
-      preCommit: [
-        'npm run -s governance:check',
-        `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs format:check`,
-        `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs lint`,
-      ],
-      prePush: [
-        'npm run -s governance:check',
-        `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs test`,
-        `node ./node_modules/${PACKAGE_NAME}/scripts/noop.mjs build`,
-      ],
+      preCommit: [GENERIC_SELF_CHECK_COMMAND],
+      prePush: [GENERIC_SELF_CHECK_COMMAND],
     },
+    branchProtection: {
+      blockDirectPush: ['main', 'master'],
+      branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
+    },
+    agentic: {
+      ...DEFAULT_AGENTIC_CONFIG,
+    },
+    node: {
+      minVersion: '20.0.0',
+    },
+  },
+  'generic-strict': {
+    configVersion: '1.0',
+    tracker: {
+      path: TRACKER_PATH,
+      idPattern: '^[A-Z]+-[A-Z]+-\\d{3}$',
+      allowedPrefixes: ['AG'],
+    },
+    gates: GENERIC_STRICT_GATES,
     branchProtection: {
       blockDirectPush: ['main', 'master'],
       branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
@@ -798,7 +834,7 @@ Modes:
   --rollback            Restore artifacts from backup snapshot
 
 Options:
-  --preset <name>       Preset config: node-npm-cjs|node-npm-esm|node-pnpm-monorepo|node-yarn-workspaces|generic
+  --preset <name>       Preset config: node-npm-cjs|node-npm-esm|node-pnpm-monorepo|node-yarn-workspaces|generic|generic-strict
   --wizard              Interactive preset selection for init (mutually exclusive with --preset)
   --hook-strategy <s>   Hook install strategy: auto|core-hooks|git-hooks
   --tracker-path <path> Existing tracker file to use during --adopt when tracker mapping is custom or ambiguous
@@ -818,6 +854,7 @@ Options:
 
 Examples:
   node scripts/governance-check.mjs --init --preset node-npm-cjs --hook-strategy auto
+  node scripts/governance-check.mjs --init --preset generic-strict --hook-strategy auto
   node scripts/governance-check.mjs --init --wizard --hook-strategy auto
   node scripts/governance-check.mjs --ci-check --gate all
   node scripts/governance-check.mjs --release-check --scope all --report both --out-dir .governance/release-check
@@ -974,7 +1011,15 @@ function validatePreservedConfigOverrides(config, configPath) {
   validateConfigObject(config, `preserved generation overrides from ${configPath}`, sourcePath(SCHEMA_PATH));
 }
 
-function readConfiguredGenerationOverrides(configPath = CONFIG_PATH) {
+function jsonEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function isLegacyGeneratedGenericGates(gates) {
+  return jsonEqual(gates, LEGACY_GENERIC_NOOP_GATES);
+}
+
+function readConfiguredGenerationOverrides(configPath = CONFIG_PATH, options = {}) {
   const configFile = targetPath(configPath);
   if (!existsSync(configFile)) {
     return {
@@ -996,6 +1041,13 @@ function readConfiguredGenerationOverrides(configPath = CONFIG_PATH) {
   const configSections = {};
   for (const sectionName of PRESERVED_CONFIG_SECTIONS) {
     if (config[sectionName] !== undefined) {
+      if (
+        sectionName === 'gates' &&
+        options.preset === 'generic' &&
+        isLegacyGeneratedGenericGates(config[sectionName])
+      ) {
+        continue;
+      }
       configSections[sectionName] = cloneJson(config[sectionName]);
     }
   }
@@ -2127,7 +2179,9 @@ function runAdopt(options) {
   const manifest = readManifest();
   const profile = detectAdoptRepoProfile(options);
   const runtimeOptions = resolveAdoptRuntimeOptions(options, manifest, profile);
-  const preservedOverrides = readConfiguredGenerationOverrides(options.configPath || CONFIG_PATH);
+  const preservedOverrides = readConfiguredGenerationOverrides(options.configPath || CONFIG_PATH, {
+    preset: runtimeOptions.preset,
+  });
   const forceEnabled = runtimeOptions.apply && runtimeOptions.force;
   const conflictState = detectHookManagers();
   const skipGeneratedWrites = runtimeOptions.trackerBlockers.length > 0 || runtimeOptions.presetSource === 'unresolved';
@@ -2382,10 +2436,13 @@ function runUpgrade(options) {
     fail('✖ Missing .governance/manifest.json. Run: npx @ramuks22/ai-agent-governance init');
   }
 
-  const generatedOverrides = readConfiguredGenerationOverrides(options.configPath || CONFIG_PATH);
+  const upgradePreset = manifest.preset || options.preset;
+  const generatedOverrides = readConfiguredGenerationOverrides(options.configPath || CONFIG_PATH, {
+    preset: upgradePreset,
+  });
   const runtimeOptions = {
     ...options,
-    preset: manifest.preset || options.preset,
+    preset: upgradePreset,
     hookStrategy: manifest.hookStrategy || options.hookStrategy,
     generatedOverrides,
     includeTrackerFile: generatedOverrides.trackerPath ? generatedOverrides.trackerPath === TRACKER_PATH : true,

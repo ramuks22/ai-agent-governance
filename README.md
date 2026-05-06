@@ -48,13 +48,14 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
    npx @ramuks22/ai-agent-governance rollback --to latest --force
    ```
 
-### Preset Matrix (Stage 4)
+### Preset Matrix
 
 - `node-npm-cjs` - npm single-package CJS projects
 - `node-npm-esm` - npm single-package ESM projects
 - `node-pnpm-monorepo` - pnpm monorepo/workspace projects
 - `node-yarn-workspaces` - yarn workspace projects
-- `generic` - strict fail-closed placeholders (`noop.mjs`) for lint/format/test/build until you configure real commands
+- `generic` - staged adoption for unknown repos; runs governance self-check without placeholder lint/test/build blockers
+- `generic-strict` - explicit fail-closed placeholders (`noop.mjs`) for lint/format/test/build until you configure real commands
 
 ### Legacy/Manual Mode (Fallback)
 
@@ -459,6 +460,7 @@ CLI equivalent (package mode):
   - `npx @ramuks22/ai-agent-governance adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md`
 - Resolve hybrid npm inference with an explicit preset:
   - `npx @ramuks22/ai-agent-governance adopt --preset generic --report .governance/adopt-report.md`
+- Use `--preset generic` for staged adoption in unknown repos; use `--preset generic-strict` only when placeholder lint/test/build gates should fail until intentionally replaced.
 - Review the generated report and patch before write operations:
   - `.governance/adopt-report.md`
   - `.governance/patches/adopt.patch`

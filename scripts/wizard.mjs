@@ -24,7 +24,7 @@ function resolveInputShape(input) {
 
 function formatMatrixLine(entry) {
   if (entry.packageManager === 'generic') {
-    return `- generic => ${entry.preset}`;
+    return `- generic => ${entry.preset} (staged; use --preset generic-strict for fail-closed placeholders)`;
   }
 
   if (entry.packageManager === 'npm') {
@@ -44,6 +44,7 @@ export function wizardFallbackExamples() {
     'npx @ramuks22/ai-agent-governance init --preset node-pnpm-monorepo',
     'npx @ramuks22/ai-agent-governance init --preset node-yarn-workspaces',
     'npx @ramuks22/ai-agent-governance init --preset generic',
+    'npx @ramuks22/ai-agent-governance init --preset generic-strict',
   ].join('\n');
 }
 
