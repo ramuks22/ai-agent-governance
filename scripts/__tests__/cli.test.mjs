@@ -143,6 +143,18 @@ test('init + check + doctor succeeds in fresh repo', () => {
   assert.match(doctor.stdout, /\[doctor\] PASS hooks/);
 });
 
+test('init generates reusable workflow with repo-local governance runtime', () => {
+  const repo = setupRepo('gov-cli-reusable-local-runtime');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const workflow = readFileSync(path.join(repo, '.github', 'workflows', 'governance-ci-reusable.yml'), 'utf8');
+  assert.doesNotMatch(workflow, /package_version:/);
+  assert.doesNotMatch(workflow, /@ramuks22\/ai-agent-governance@\$\{\{ inputs\.package_version \}\}/);
+  assert.match(workflow, /run: npx --no-install ai-governance check/);
+  assert.match(workflow, /run: npx --no-install ai-governance ci-check --gate all/);
+});
+
 test('init accepts pnpm and yarn workspace presets', () => {
   const pnpmRepo = setupRepo('gov-cli-pnpm-preset');
   const pnpmInit = run(['init', '--preset', 'node-pnpm-monorepo', '--hook-strategy', 'auto'], pnpmRepo);
@@ -732,6 +744,31 @@ test('adopt --tracker-path resolves custom tracker mapping and upgrade preserves
   assert.doesNotMatch(deliveryGovernance, /docs\/tracker\.md/);
 });
 
+test('adopt supports GitHub dependency install path with local reusable workflow runtime', () => {
+  const repo = setupRepo('gov-cli-adopt-github-dependency-local-runtime');
+  mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  writeJsonFile(repo, 'package.json', {
+    name: 'sample',
+    version: '1.0.0',
+    type: 'module',
+    devDependencies: {
+      '@ramuks22/ai-agent-governance': 'github:ramuks22/ai-agent-governance#v1.1.0',
+    },
+  });
+  writeFileSync(path.join(repo, 'docs', 'tracker.md'), '# Tracker\n', 'utf8');
+  commitAll(repo, 'chore: baseline GitHub governance dependency');
+
+  const adopt = run(['adopt', '--preset', 'node-npm-cjs', '--apply'], repo);
+  assert.equal(adopt.status, 0, `${adopt.stdout}\n${adopt.stderr}`);
+
+  const workflow = readFileSync(path.join(repo, '.github', 'workflows', 'governance-ci-reusable.yml'), 'utf8');
+  assert.match(workflow, /default: 'npm ci'/);
+  assert.doesNotMatch(workflow, /package_version:/);
+  assert.doesNotMatch(workflow, /npx --yes @ramuks22\/ai-agent-governance@/);
+  assert.match(workflow, /run: npx --no-install ai-governance check/);
+  assert.match(workflow, /run: npx --no-install ai-governance ci-check --gate all/);
+});
+
 test('adopt customize then upgrade force preserves known repo-owned config and rendered tracker conventions', () => {
   const repo = setupRepo('gov-cli-upgrade-preserve-known-customizations');
   writeFileSync(
@@ -839,6 +876,66 @@ test('upgrade preserves ci.preCiCommand when rewriting managed config', () => {
   assert.deepEqual(updated.ci, { preCiCommand: 'npm run codegen' });
 });
 
+test('upgrade force migrates old generated reusable workflow npm package commands', () => {
+  const repo = setupRepo('gov-cli-upgrade-migrate-reusable-workflow-runtime');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const workflowPath = path.join(repo, '.github', 'workflows', 'governance-ci-reusable.yml');
+  writeFileSync(
+    workflowPath,
+    `name: Governance CI Reusable
+
+on:
+  workflow_call:
+    inputs:
+      package_version:
+        description: Pinned @ramuks22/ai-agent-governance package version (for example 1.1.0)
+        required: true
+        type: string
+      node_version:
+        description: Node version for CI runtime
+        required: false
+        default: '20'
+        type: string
+      install_command:
+        description: Dependency install command for your package manager
+        required: false
+        default: 'npm ci'
+        type: string
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: \${{ inputs.node_version }}
+
+      - name: Install dependencies
+        run: \${{ inputs.install_command }}
+
+      - name: Governance Check
+        run: npx --yes @ramuks22/ai-agent-governance@\${{ inputs.package_version }} check
+
+      - name: CI Check (pre-commit + pre-push gates)
+        run: npx --yes @ramuks22/ai-agent-governance@\${{ inputs.package_version }} ci-check --gate all
+`,
+    'utf8'
+  );
+
+  const result = run(['upgrade', '--force'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+
+  const updated = readFileSync(workflowPath, 'utf8');
+  assert.doesNotMatch(updated, /package_version:/);
+  assert.doesNotMatch(updated, /npx --yes @ramuks22\/ai-agent-governance@/);
+  assert.match(updated, /run: npx --no-install ai-governance check/);
+  assert.match(updated, /run: npx --no-install ai-governance ci-check --gate all/);
+});
+
 test('upgrade force preserves known reusable workflow command customizations only', () => {
   const repo = setupRepo('gov-cli-upgrade-preserve-reusable-workflow');
   const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
@@ -850,11 +947,11 @@ test('upgrade force preserves known reusable workflow command customizations onl
     .replace("default: '20'", "default: '22'")
     .replace("default: 'npm ci'", "default: 'npm install --ignore-scripts'")
     .replace(
-      'run: npx --yes @ramuks22/ai-agent-governance@${{ inputs.package_version }} check',
+      'run: npx --no-install ai-governance check',
       'run: ./scripts/governance-check-wrapper.sh'
     )
     .replace(
-      'run: npx --yes @ramuks22/ai-agent-governance@${{ inputs.package_version }} ci-check --gate all',
+      'run: npx --no-install ai-governance ci-check --gate all',
       'run: ./scripts/governance-ci-wrapper.sh'
     );
   writeFileSync(workflowPath, customized, 'utf8');
@@ -1250,7 +1347,7 @@ test('doctor ci-parity recognizes governance-ci-reusable workflow references', (
 
   writeFileSync(
     path.join(repo, '.github', 'workflows', 'caller.yml'),
-    'name: Governance\\non:\\n  pull_request:\\n    branches: [main]\\njobs:\\n  governance:\\n    uses: ramuks22/ai-agent-governance/.github/workflows/governance-ci-reusable.yml@v1.1.0\\n    with:\\n      package_version: \"1.1.0\"\\n',
+    'name: Governance\\non:\\n  pull_request:\\n    branches: [main]\\njobs:\\n  governance:\\n    uses: ramuks22/ai-agent-governance/.github/workflows/governance-ci-reusable.yml@v1.1.0\\n',
     'utf8'
   );
 

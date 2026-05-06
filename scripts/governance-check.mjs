@@ -1388,6 +1388,10 @@ function renderTemplateExamples(relPath, content, context) {
   return content;
 }
 
+function isLegacyGeneratedReusableWorkflowCommand(command, expectedCommand) {
+  return command === `npx --yes ${PACKAGE_NAME}@\${{ inputs.package_version }} ${expectedCommand}`;
+}
+
 function extractReusableWorkflowPreservedFields(existingContent) {
   if (!existingContent) return {};
   const fields = {};
@@ -1397,13 +1401,21 @@ function extractReusableWorkflowPreservedFields(existingContent) {
   }
 
   const governanceCheckMatch = existingContent.match(/- name: Governance Check\s*\n\s*run:\s*([^\n]+)/);
-  if (governanceCheckMatch?.[1]?.trim()) {
-    fields.governanceCheckCommand = governanceCheckMatch[1].trim();
+  const governanceCheckCommand = governanceCheckMatch?.[1]?.trim();
+  if (
+    governanceCheckCommand &&
+    !isLegacyGeneratedReusableWorkflowCommand(governanceCheckCommand, 'check')
+  ) {
+    fields.governanceCheckCommand = governanceCheckCommand;
   }
 
   const ciCheckMatch = existingContent.match(/- name: CI Check \(pre-commit \+ pre-push gates\)\s*\n\s*run:\s*([^\n]+)/);
-  if (ciCheckMatch?.[1]?.trim()) {
-    fields.ciCheckCommand = ciCheckMatch[1].trim();
+  const ciCheckCommand = ciCheckMatch?.[1]?.trim();
+  if (
+    ciCheckCommand &&
+    !isLegacyGeneratedReusableWorkflowCommand(ciCheckCommand, 'ci-check --gate all')
+  ) {
+    fields.ciCheckCommand = ciCheckCommand;
   }
 
   return fields;
