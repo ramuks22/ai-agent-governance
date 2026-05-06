@@ -20,6 +20,10 @@ import {
   supportedWizardMatrixText,
   wizardFallbackExamples,
 } from './wizard.mjs';
+import {
+  DEFAULT_AGENTIC_CONFIG,
+  validateAgenticArtifacts,
+} from './agentic.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
@@ -61,6 +65,9 @@ const PRESETS = {
       blockDirectPush: ['main', 'master'],
       branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
     },
+    agentic: {
+      ...DEFAULT_AGENTIC_CONFIG,
+    },
     node: {
       minVersion: '20.0.0',
     },
@@ -79,6 +86,9 @@ const PRESETS = {
     branchProtection: {
       blockDirectPush: ['main', 'master'],
       branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
+    },
+    agentic: {
+      ...DEFAULT_AGENTIC_CONFIG,
     },
     node: {
       minVersion: '20.0.0',
@@ -99,6 +109,9 @@ const PRESETS = {
       blockDirectPush: ['main', 'master'],
       branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
     },
+    agentic: {
+      ...DEFAULT_AGENTIC_CONFIG,
+    },
     node: {
       minVersion: '20.0.0',
     },
@@ -117,6 +130,9 @@ const PRESETS = {
     branchProtection: {
       blockDirectPush: ['main', 'master'],
       branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
+    },
+    agentic: {
+      ...DEFAULT_AGENTIC_CONFIG,
     },
     node: {
       minVersion: '20.0.0',
@@ -145,6 +161,9 @@ const PRESETS = {
       blockDirectPush: ['main', 'master'],
       branchNamePattern: '^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$',
     },
+    agentic: {
+      ...DEFAULT_AGENTIC_CONFIG,
+    },
     node: {
       minVersion: '20.0.0',
     },
@@ -158,15 +177,35 @@ const ARTIFACT_FILES = [
   '.agent/workflows/requirements-workshop.md',
   '.agent/workflows/merge-pr.md',
   'docs/development/delivery-governance.md',
+  'docs/agentic/operating-model.md',
+  'docs/agentic/adapter-strategy.md',
+  'docs/agentic/migration.md',
   'docs/templates/tracker-template.md',
   'docs/templates/requirements-workshop-template.md',
+  'docs/examples/agentic-example-flow.md',
   '.github/pull_request_template.md',
   '.github/workflows/governance-ci.yml',
   REUSABLE_GOVERNANCE_WORKFLOW_PATH,
+  'governance/agent-roles.json',
+  'governance/agent-skills.json',
+  'governance/agent-adapters.json',
+  'schemas/agent-roles.schema.json',
+  'schemas/agent-skills.schema.json',
+  'schemas/agent-handoff.schema.json',
+  'schemas/agent-retrospective.schema.json',
+  'schemas/agent-adapters.schema.json',
+  'examples/handoffs/AG-GOV-054-schema-handoff.json',
+  'examples/retrospectives/AG-GOV-054-ownership-retro.json',
+  'generated/adapters/codex/AGENTS.md',
+  'generated/adapters/claude-code/CLAUDE.md',
+  'generated/adapters/cursor/.cursorrules',
+  'generated/adapters/github-copilot/copilot-instructions.md',
+  'generated/adapters/antigravity/AGENT-GOVERNANCE.md',
+  'generated/adapters/generic/AGENT-GOVERNANCE.md',
   SCHEMA_PATH,
 ];
 
-const PRESERVED_CONFIG_SECTIONS = ['tracker', 'gates', 'ci', 'branchProtection', 'node'];
+const PRESERVED_CONFIG_SECTIONS = ['tracker', 'gates', 'ci', 'branchProtection', 'agentic', 'node'];
 const TRACKER_RENDERED_ARTIFACTS = new Set([
   'AGENTS.md',
   '.agent/workflows/governance.md',
@@ -402,17 +441,29 @@ function execText(command, args) {
   return (result.stdout || '').trim();
 }
 
-function runCommand(command, args) {
+function runCommand(command, args, extraEnv = {}) {
   const result = spawnSync(command, args, {
     encoding: 'utf8',
     shell: process.platform === 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
     cwd: TARGET_ROOT,
+    env: {
+      ...process.env,
+      ...extraEnv,
+    },
   });
   return {
     ok: result.status === 0,
     stdout: (result.stdout || '').trim(),
     stderr: (result.stderr || '').trim(),
+  };
+}
+
+function npmCommandEnv() {
+  const cacheDir = targetPath(path.join('.governance', 'npm-cache'));
+  mkdirSync(cacheDir, { recursive: true });
+  return {
+    npm_config_cache: cacheDir,
   };
 }
 
@@ -930,6 +981,7 @@ function readConfiguredGenerationOverrides(configPath = CONFIG_PATH) {
       configSections: {},
       trackerPath: '',
       preCiCommand: '',
+      agentic: null,
     };
   }
 
@@ -2561,6 +2613,10 @@ function runCheck(options) {
   }
 
   checkTrackerExists(config.tracker.path);
+  const agentic = validateAgenticArtifacts({ repoRoot: TARGET_ROOT, config });
+  if (agentic.issues.length > 0) {
+    fail(`✖ Agentic governance validation failed:\n- ${agentic.issues.join('\n- ')}`);
+  }
   info(`[governance] Configuration valid${options.skipHooks ? '.' : ' and hooks installed.'}`);
 }
 
@@ -2798,7 +2854,7 @@ function evaluateReleaseDistributionChecks() {
       : floatingRefIssues.join('; ')
   );
 
-  const packResult = runCommand('npm', ['pack', '--dry-run']);
+  const packResult = runCommand('npm', ['pack', '--dry-run'], npmCommandEnv());
   add(
     'distribution.pack-dry-run',
     packResult.ok,
@@ -3146,7 +3202,7 @@ function evaluateReleasePublishPreconditions(options) {
       : `release-check failed: ${summarizeCommandOutput(releaseCheckResult)}`
   );
 
-  const packDryRun = runCommand('npm', ['pack', '--dry-run']);
+  const packDryRun = runCommand('npm', ['pack', '--dry-run'], npmCommandEnv());
   add(
     'publish.pack-dry-run',
     'npm pack --dry-run succeeds',
@@ -3614,6 +3670,19 @@ function runDoctor(options) {
     add('tracker-file', existsSync(targetPath(config.tracker.path)), config.tracker.path);
   } else {
     add('tracker-file', false, 'tracker.path missing in config');
+  }
+
+  if (config?.agentic?.enabled) {
+    const agentic = validateAgenticArtifacts({ repoRoot: TARGET_ROOT, config });
+    add('agentic-valid', agentic.issues.length === 0, agentic.issues.length === 0 ? 'agentic registries, artifacts, and adapters are valid' : agentic.issues.join('; '));
+    add(
+      'agentic-artifacts',
+      agentic.handoffFiles.length > 0 && agentic.retrospectiveFiles.length > 0,
+      `handoffs=${agentic.handoffFiles.length}, retrospectives=${agentic.retrospectiveFiles.length}, adapters=${agentic.expectedAdapters.length}`
+    );
+  } else {
+    add('agentic-valid', true, 'agentic validation disabled');
+    add('agentic-artifacts', true, 'agentic artifacts not required');
   }
 
   const ciParity = evaluateCiParity();

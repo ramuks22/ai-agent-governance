@@ -10,6 +10,8 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
 - 🔀 Merge-by-command protocol with auditability
 - 🔄 CI parity for local gates
 - 🧪 Release maintenance and distribution preflight checks
+- 🧩 Schema-backed agent roles, skills, handoffs, and retrospectives
+- 🛠 Deterministic multi-tool adapter generation with drift detection
 
 ## 5-Minute Quickstart (Package-First)
 
@@ -118,6 +120,9 @@ npx @ramuks22/ai-agent-governance adopt --apply
 | `.agent/workflows/merge-pr.md` | Merge-By-Command Protocol |
 | `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)` | Canonical governance terminology |
 | `docs/development/delivery-governance.md` | Full lifecycle framework |
+| `docs/agentic/operating-model.md` | Canonical vendor-neutral agentic operating model |
+| `docs/agentic/adapter-strategy.md` | Canonical canonical-vs-generated adapter boundary |
+| `docs/agentic/migration.md` | Canonical migration notes for the agentic layer |
 | `docs/development/release-maintenance-policy.md` | Canonical release maintenance policy, support SLA, compatibility matrix, and offline install contract |
 | `governance.config.json` | Project-specific configuration |
 
@@ -132,13 +137,29 @@ npx @ramuks22/ai-agent-governance adopt --apply
 │   ├── requirements-workshop.md      # Requirements workshop workflow
 │   └── merge-pr.md                   # Merge-By-Command Protocol
 ├── docs/
+│   ├── agentic/
+│   │   ├── operating-model.md        # Canonical vendor-neutral agentic operating model
+│   │   ├── adapter-strategy.md       # Canonical canonical-vs-generated boundary
+│   │   └── migration.md              # Incremental migration notes
 │   ├── development/delivery-governance.md
 │   ├── templates/
 │   │   ├── tracker-template.md       # Blank tracker template
 │   │   └── requirements-workshop-template.md
 │   ├── examples/
-│   │   └── AG-GOV-004-workshop.md    # Example workshop artifact
+│   │   ├── AG-GOV-004-workshop.md    # Example workshop artifact
+│   │   └── agentic-example-flow.md   # End-to-end agentic example
 │   └── tracker.md                    # Active project tracker
+├── governance/
+│   ├── agent-roles.json              # Canonical role registry
+│   ├── agent-skills.json             # Canonical skill registry
+│   └── agent-adapters.json           # Canonical adapter registry
+├── schemas/
+│   ├── agent-roles.schema.json       # Role registry schema
+│   ├── agent-skills.schema.json      # Skill registry schema
+│   ├── agent-handoff.schema.json     # Handoff schema
+│   ├── agent-retrospective.schema.json # Retrospective schema
+│   └── agent-adapters.schema.json    # Adapter registry schema
+├── generated/adapters/               # Generated vendor-specific instruction projections
 ├── .githooks/
 │   ├── pre-commit                    # Format, lint, secret scan
 │   ├── pre-push                      # Tests, build
@@ -169,6 +190,7 @@ The framework is driven by `governance.config.json` and validated against `gover
 | `gates.preCommit` | Commands to run on pre-commit |
 | `gates.prePush` | Commands to run on pre-push |
 | `ci.preCiCommand` | Optional command to run once before `ci-check` executes selected CI gates |
+| `agentic.*` | Paths and safety controls for role/skill registries, artifacts, and adapter generation |
 | `branchProtection.blockDirectPush` | Branches that block direct pushes |
 | `branchProtection.branchNamePattern` | Regex for allowed branch names |
 | `node.minVersion` | Minimum required Node.js version |
@@ -190,6 +212,20 @@ The framework is driven by `governance.config.json` and validated against `gover
   "ci": {
     "preCiCommand": "npm run codegen"
   },
+  "agentic": {
+    "enabled": true,
+    "roleRegistryPath": "governance/agent-roles.json",
+    "skillRegistryPath": "governance/agent-skills.json",
+    "adapterRegistryPath": "governance/agent-adapters.json",
+    "generatedAdapterPath": "generated/adapters",
+    "handoffArtifactPath": "examples/handoffs",
+    "retrospectiveArtifactPath": "examples/retrospectives",
+    "retrospectiveRequiredFor": ["ownership-conflict", "handoff-rework", "validation-escape"],
+    "maxParallelWriters": 1,
+    "allowReadOnlyParallelism": true,
+    "requireBoundedOwnership": true,
+    "adapterGenerationMode": "checked-in"
+  },
   "branchProtection": {
     "blockDirectPush": ["main", "master"],
     "branchNamePattern": "^(feat|fix|hotfix|chore|docs|refactor|test|perf|build|ci|revert|release)\\/[a-z0-9._-]+(?:\\/[a-z0-9._-]+)*$"
@@ -201,6 +237,8 @@ The framework is driven by `governance.config.json` and validated against `gover
 ```
 
 `ci.preCiCommand` is optional. When present, `ci-check` runs it once after config/node/tracker validation and before the selected `preCommit` / `prePush` gate commands. Use a generic command such as `npm run codegen`; Prisma-style repos can point it at `npx prisma generate`.
+
+The `agentic` block enables vendor-neutral role, skill, handoff, retrospective, and adapter validation. `generated/adapters/**` stays generated output; canonical policy remains in `docs/agentic/**` and `governance/*.json`.
 
 ### Branch Naming Enforcement
 
@@ -241,35 +279,23 @@ Update `tracker.idPattern` and `tracker.allowedPrefixes` accordingly.
 
 ## Multi-Tool Compatibility
 
-This framework is tool-agnostic and works with any AI coding assistant that supports custom instructions.
+This framework stays vendor-neutral by keeping canonical policy in docs and registries, then generating tool-specific projections under `generated/adapters/**`.
 
-### Cursor
+Generated outputs in this repository:
 
-1. Create `.cursorrules` at repo root
-2. Reference governance docs:
-   ```
-   Read and follow AGENTS.md for all contributions.
-   Follow .agent/workflows/governance.md for governance rules.
-   ```
+- `generated/adapters/codex/AGENTS.md`
+- `generated/adapters/claude-code/CLAUDE.md`
+- `generated/adapters/cursor/.cursorrules`
+- `generated/adapters/github-copilot/copilot-instructions.md`
+- `generated/adapters/antigravity/AGENT-GOVERNANCE.md`
+- `generated/adapters/generic/AGENT-GOVERNANCE.md`
 
-### GitHub Copilot
+Regeneration and drift validation:
 
-1. Create `.github/copilot-instructions.md`
-2. Copy rules from `AGENTS.md` or reference it:
-   ```markdown
-   See AGENTS.md for non-negotiable governance rules.
-   Follow .agent/workflows/governance.md for all contributions.
-   ```
-
-### Claude Code / Anthropic Tools
-
-1. Include `AGENTS.md` content in your project context
-2. Reference `.agent/workflows/*.md` for workflow rules
-
-### Other AI Tools
-
-1. Copy `AGENTS.md` content into the tool's instructions/context
-2. Or configure the tool to read from `AGENTS.md` if supported
+```bash
+npm run governance:adapters
+npm run governance:check
+```
 
 ## Merge-by-Command Protocol
 
