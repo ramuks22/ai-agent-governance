@@ -67,6 +67,76 @@
         }
       }
     },
+    "agentic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "roleRegistryPath",
+        "skillRegistryPath",
+        "adapterRegistryPath",
+        "generatedAdapterPath",
+        "handoffArtifactPath",
+        "retrospectiveArtifactPath",
+        "retrospectiveRequiredFor",
+        "maxParallelWriters",
+        "allowReadOnlyParallelism",
+        "requireBoundedOwnership",
+        "adapterGenerationMode"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "roleRegistryPath": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "skillRegistryPath": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "adapterRegistryPath": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "generatedAdapterPath": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "handoffArtifactPath": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "retrospectiveArtifactPath": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "retrospectiveRequiredFor": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        },
+        "maxParallelWriters": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "allowReadOnlyParallelism": {
+          "type": "boolean"
+        },
+        "requireBoundedOwnership": {
+          "type": "boolean"
+        },
+        "adapterGenerationMode": {
+          "type": "string",
+          "enum": [
+            "checked-in"
+          ]
+        }
+      }
+    },
     "branchProtection": {
       "type": "object",
       "additionalProperties": false,
