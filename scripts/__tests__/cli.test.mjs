@@ -41,6 +41,7 @@ function runText(command, args, cwd) {
   return spawnSync(command, args, {
     cwd,
     encoding: 'utf8',
+    env: { ...process.env, CI: 'false' },
     shell: process.platform === 'win32',
   });
 }
