@@ -216,6 +216,7 @@ const ARTIFACT_FILES = [
   'docs/agentic/operating-model.md',
   'docs/agentic/adapter-strategy.md',
   'docs/agentic/migration.md',
+  'docs/examples/AG-GOV-009-workshop-adoption-examples.md',
   'docs/templates/tracker-template.md',
   'docs/templates/requirements-workshop-template.md',
   'docs/examples/agentic-example-flow.md',
@@ -1492,6 +1493,25 @@ function renderTemplateExamples(relPath, content, context) {
   return content;
 }
 
+function renderAdopterDocumentationReferences(relPath, content) {
+  if (relPath === '.agent/workflows/governance.md') {
+    return content
+      .split(' docs/development/delivery-governance.md README.md docs/README.md')
+      .join(' docs/development/delivery-governance.md')
+      .split(' docs/tracker.md README.md')
+      .join(' docs/tracker.md');
+  }
+
+  if (relPath === 'docs/development/delivery-governance.md') {
+    return content.replace(
+      /^- Release\/maintenance policy \(canonical\): `docs\/development\/release-maintenance-policy\.md`\n/m,
+      ''
+    );
+  }
+
+  return content;
+}
+
 function isLegacyGeneratedReusableWorkflowCommand(command, expectedCommand) {
   return command === `npx --yes ${PACKAGE_NAME}@\${{ inputs.package_version }} ${expectedCommand}`;
 }
@@ -1554,6 +1574,7 @@ function renderManagedArtifactContent(relPath, content, context) {
     rendered = renderTrackerReferences(rendered, context);
   }
   rendered = renderTemplateExamples(relPath, rendered, context);
+  rendered = renderAdopterDocumentationReferences(relPath, rendered);
 
   if (relPath === REUSABLE_GOVERNANCE_WORKFLOW_PATH) {
     const existingPath = targetPath(relPath);

@@ -106,6 +106,39 @@ function writeJsonFile(cwd, relPath, value) {
   writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
+function stripFencedCodeBlocks(markdown) {
+  return markdown.replace(/```[\s\S]*?```/g, '');
+}
+
+function collectBacktickedRepoPathReferences(markdown) {
+  const references = [];
+  const stripped = stripFencedCodeBlocks(markdown);
+  const regex = /`([^`\n]+)`/g;
+  let match;
+  while ((match = regex.exec(stripped)) !== null) {
+    const candidate = match[1].trim();
+    if (!candidate || /[\s<>*|\\]/.test(candidate)) continue;
+    if (!/^[A-Za-z0-9._/-]+$/.test(candidate)) continue;
+    if (candidate.includes('/') || candidate.startsWith('.') || candidate === 'AGENTS.md') {
+      references.push(candidate);
+    }
+  }
+  return [...new Set(references)].sort();
+}
+
+function assertGeneratedDocReferencesResolve(cwd, relPaths) {
+  const missing = [];
+  for (const relPath of relPaths) {
+    const markdown = readFileSync(path.join(cwd, relPath), 'utf8');
+    for (const reference of collectBacktickedRepoPathReferences(markdown)) {
+      if (!existsSync(path.join(cwd, reference))) {
+        missing.push(`${relPath} -> ${reference}`);
+      }
+    }
+  }
+  assert.deepEqual(missing, []);
+}
+
 function setupHybridNpmRepo(name, scripts, nestedPackageRoots = ['backend/package.json']) {
   const repo = setupRepo(name);
   writeJsonFile(repo, 'package.json', {
@@ -811,6 +844,46 @@ test('adopt --tracker-path resolves custom tracker mapping and upgrade preserves
   const deliveryGovernance = readFileSync(path.join(repo, 'docs', 'development', 'delivery-governance.md'), 'utf8');
   assert.match(deliveryGovernance, /docs\/tracker\.json/);
   assert.doesNotMatch(deliveryGovernance, /docs\/tracker\.md/);
+});
+
+test('adopt generic apply generates self-contained core governance doc references', () => {
+  const repo = setupRepo('gov-cli-adopt-generic-doc-references');
+  writeJsonFile(repo, 'package.json', {
+    name: 'sample',
+    version: '1.0.0',
+  });
+  commitAll(repo, 'chore: baseline generic adoption');
+
+  const adopt = run(['adopt', '--preset', 'generic', '--apply'], repo);
+  assert.equal(adopt.status, 0, `${adopt.stdout}\n${adopt.stderr}`);
+
+  const governanceWorkflow = readFileSync(path.join(repo, '.agent', 'workflows', 'governance.md'), 'utf8');
+  assert.doesNotMatch(governanceWorkflow, /docs\/README\.md/);
+  assert.doesNotMatch(governanceWorkflow, / README\.md/);
+
+  const workshopWorkflow = readFileSync(
+    path.join(repo, '.agent', 'workflows', 'requirements-workshop.md'),
+    'utf8'
+  );
+  assert.match(workshopWorkflow, /docs\/examples\/AG-GOV-009-workshop-adoption-examples\.md/);
+  assert.equal(
+    existsSync(path.join(repo, 'docs', 'examples', 'AG-GOV-009-workshop-adoption-examples.md')),
+    true
+  );
+
+  const deliveryGovernance = readFileSync(
+    path.join(repo, 'docs', 'development', 'delivery-governance.md'),
+    'utf8'
+  );
+  assert.doesNotMatch(deliveryGovernance, /docs\/development\/release-maintenance-policy\.md/);
+
+  assertGeneratedDocReferencesResolve(repo, [
+    'AGENTS.md',
+    '.agent/workflows/governance.md',
+    '.agent/workflows/requirements-workshop.md',
+    '.agent/workflows/merge-pr.md',
+    'docs/development/delivery-governance.md',
+  ]);
 });
 
 test('adopt supports GitHub dependency install path with local reusable workflow runtime', () => {
