@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, writeFileSync, readFileSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,22 @@ import {
 } from '../governance-check.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageRoot = path.resolve(__dirname, '..', '..');
 const binPath = path.resolve(__dirname, '..', '..', 'bin', 'ai-governance.mjs');
+const packageName = '@ramuks22/ai-agent-governance';
+const genericSelfCheckCommand = `node ./node_modules/${packageName}/bin/ai-governance.mjs check`;
+const legacyGenericNoopGates = {
+  preCommit: [
+    'npm run -s governance:check',
+    `node ./node_modules/${packageName}/scripts/noop.mjs format:check`,
+    `node ./node_modules/${packageName}/scripts/noop.mjs lint`,
+  ],
+  prePush: [
+    'npm run -s governance:check',
+    `node ./node_modules/${packageName}/scripts/noop.mjs test`,
+    `node ./node_modules/${packageName}/scripts/noop.mjs build`,
+  ],
+};
 
 function run(args, cwd) {
   return spawnSync(process.execPath, [binPath, ...args], {
@@ -26,6 +41,7 @@ function runText(command, args, cwd) {
   return spawnSync(command, args, {
     cwd,
     encoding: 'utf8',
+    env: { ...process.env, CI: 'false' },
     shell: process.platform === 'win32',
   });
 }
@@ -35,6 +51,16 @@ function setupRepo(name) {
   const init = runText('git', ['init', '-q'], dir);
   assert.equal(init.status, 0, init.stderr);
   return dir;
+}
+
+function linkPackageIntoRepo(cwd) {
+  const scopeDir = path.join(cwd, 'node_modules', '@ramuks22');
+  mkdirSync(scopeDir, { recursive: true });
+  symlinkSync(
+    packageRoot,
+    path.join(scopeDir, 'ai-agent-governance'),
+    process.platform === 'win32' ? 'junction' : 'dir'
+  );
 }
 
 function commitAll(cwd, message = 'chore: commit') {
@@ -171,16 +197,59 @@ test('init accepts pnpm and yarn workspace presets', () => {
   assert.equal(yarnConfig.gates.prePush[0], 'yarn run governance:check');
 });
 
-test('generic preset is fail-closed with placeholder commands', () => {
+test('generic preset is staged with governance self-check only', () => {
   const repo = setupRepo('gov-cli-generic-preset');
   const init = run(['init', '--preset', 'generic', '--hook-strategy', 'auto'], repo);
   assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
 
   const config = JSON.parse(readFileSync(path.join(repo, 'governance.config.json'), 'utf8'));
+  assert.deepEqual(config.gates.preCommit, [genericSelfCheckCommand]);
+  assert.deepEqual(config.gates.prePush, [genericSelfCheckCommand]);
+  assert.doesNotMatch(JSON.stringify(config.gates), /noop\.mjs/);
+});
+
+test('generic-strict preset is fail-closed with placeholder commands', () => {
+  const repo = setupRepo('gov-cli-generic-strict-preset');
+  const init = run(['init', '--preset', 'generic-strict', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const config = JSON.parse(readFileSync(path.join(repo, 'governance.config.json'), 'utf8'));
+  assert.equal(config.gates.preCommit[0], genericSelfCheckCommand);
   assert.match(config.gates.preCommit[1], /scripts\/noop\.mjs format:check/);
   assert.match(config.gates.preCommit[2], /scripts\/noop\.mjs lint/);
+  assert.equal(config.gates.prePush[0], genericSelfCheckCommand);
   assert.match(config.gates.prePush[1], /scripts\/noop\.mjs test/);
   assert.match(config.gates.prePush[2], /scripts\/noop\.mjs build/);
+});
+
+test('generic staged hooks pass on a valid feature branch', () => {
+  const repo = setupRepo('gov-cli-generic-staged-hooks');
+  linkPackageIntoRepo(repo);
+  const init = run(['init', '--preset', 'generic', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const branch = runText('git', ['checkout', '-b', 'feat/generic-staged-hooks'], repo);
+  assert.equal(branch.status, 0, branch.stderr);
+
+  const preCommit = runText(path.join(repo, '.githooks', 'pre-commit'), [], repo);
+  assert.equal(preCommit.status, 0, `${preCommit.stdout}\n${preCommit.stderr}`);
+
+  const prePush = runText(path.join(repo, '.githooks', 'pre-push'), [], repo);
+  assert.equal(prePush.status, 0, `${prePush.stdout}\n${prePush.stderr}`);
+});
+
+test('generic-strict hooks fail on placeholder gates', () => {
+  const repo = setupRepo('gov-cli-generic-strict-hooks');
+  linkPackageIntoRepo(repo);
+  const init = run(['init', '--preset', 'generic-strict', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const branch = runText('git', ['checkout', '-b', 'feat/generic-strict-hooks'], repo);
+  assert.equal(branch.status, 0, branch.stderr);
+
+  const preCommit = runText(path.join(repo, '.githooks', 'pre-commit'), [], repo);
+  assert.notEqual(preCommit.status, 0);
+  assert.match(`${preCommit.stdout}\n${preCommit.stderr}`, /NOT CONFIGURED/);
 });
 
 test('wizard and preset cannot be used together', () => {
@@ -495,7 +564,7 @@ test('invalid preset error lists all supported presets', () => {
   const repo = setupRepo('gov-cli-invalid-preset');
   const result = run(['init', '--preset', 'unknown-preset'], repo);
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /Allowed: node-npm-cjs, node-npm-esm, node-pnpm-monorepo, node-yarn-workspaces, generic/);
+  assert.match(result.stderr, /Allowed: node-npm-cjs, node-npm-esm, node-pnpm-monorepo, node-yarn-workspaces, generic, generic-strict/);
 });
 
 test('init rerun is idempotent when managed files are unchanged', () => {
@@ -874,6 +943,42 @@ test('upgrade preserves ci.preCiCommand when rewriting managed config', () => {
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   const updated = JSON.parse(readFileSync(configPath, 'utf8'));
   assert.deepEqual(updated.ci, { preCiCommand: 'npm run codegen' });
+});
+
+test('upgrade force migrates old generated generic noop gates to staged gates', () => {
+  const repo = setupRepo('gov-cli-upgrade-migrate-generic-noop-gates');
+  const init = run(['init', '--preset', 'generic', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.gates = legacyGenericNoopGates;
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['upgrade', '--force'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const updated = JSON.parse(readFileSync(configPath, 'utf8'));
+  assert.deepEqual(updated.gates.preCommit, [genericSelfCheckCommand]);
+  assert.deepEqual(updated.gates.prePush, [genericSelfCheckCommand]);
+});
+
+test('upgrade force preserves custom generic gates', () => {
+  const repo = setupRepo('gov-cli-upgrade-preserve-custom-generic-gates');
+  const init = run(['init', '--preset', 'generic', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.gates = {
+    preCommit: ['npm run custom:governance', 'npm run custom:lint'],
+    prePush: ['npm run custom:test', 'npm run custom:build'],
+  };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['upgrade', '--force'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const updated = JSON.parse(readFileSync(configPath, 'utf8'));
+  assert.deepEqual(updated.gates, config.gates);
 });
 
 test('upgrade force migrates old generated reusable workflow npm package commands', () => {

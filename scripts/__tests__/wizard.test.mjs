@@ -63,10 +63,12 @@ test('wizard helper text contains supported matrix and fallback commands', () =>
   assert.match(matrix, /npm \+ cjs \+ single-package => node-npm-cjs/);
   assert.match(matrix, /pnpm \+ monorepo\/workspaces => node-pnpm-monorepo/);
   assert.match(matrix, /yarn \+ monorepo\/workspaces => node-yarn-workspaces/);
+  assert.match(matrix, /generic => generic \(staged; use --preset generic-strict for fail-closed placeholders\)/);
 
   const fallback = wizardFallbackExamples();
   assert.match(fallback, /--preset node-npm-cjs/);
   assert.match(fallback, /--preset node-pnpm-monorepo/);
   assert.match(fallback, /--preset node-yarn-workspaces/);
   assert.match(fallback, /--preset generic/);
+  assert.match(fallback, /--preset generic-strict/);
 });
