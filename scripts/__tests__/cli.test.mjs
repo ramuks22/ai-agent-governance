@@ -106,6 +106,10 @@ function writeJsonFile(cwd, relPath, value) {
   writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function stripFencedCodeBlocks(markdown) {
   return markdown.replace(/```[\s\S]*?```/g, '');
 }
@@ -152,6 +156,24 @@ function setupHybridNpmRepo(name, scripts, nestedPackageRoots = ['backend/packag
       name: path.posix.basename(path.posix.dirname(nestedPath)),
       version: '1.0.0',
     });
+  }
+  return repo;
+}
+
+function setupRootlessNestedNodeRepo(name, { mixedLanguage = false } = {}) {
+  const repo = setupRepo(name);
+  writeJsonFile(repo, 'adapters/node-playwright/package.json', {
+    name: 'node-playwright',
+    version: '1.0.0',
+    scripts: {
+      test: 'node test.js',
+    },
+  });
+  if (mixedLanguage) {
+    mkdirSync(path.join(repo, 'src/main/java'), { recursive: true });
+    mkdirSync(path.join(repo, 'tests'), { recursive: true });
+    writeFileSync(path.join(repo, 'src/main/java/App.java'), 'class App {}\n', 'utf8');
+    writeFileSync(path.join(repo, 'tests/test_smoke.py'), 'print("hello")\n', 'utf8');
   }
   return repo;
 }
@@ -1349,6 +1371,73 @@ test('adopt does not trigger hybrid blocking for non-npm repos with nested packa
   assert.match(report, /inferenceStatus: confident/);
   assert.doesNotMatch(report, /layout: hybrid/);
   assert.match(report, /selectedPreset: node-pnpm-monorepo \(source=inference\)/);
+});
+
+test('adopt preserves pnpm workspace inference without root package.json', () => {
+  const repo = setupRepo('gov-cli-adopt-rootless-pnpm-workspace');
+  writeFileSync(path.join(repo, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n', 'utf8');
+  writeJsonFile(repo, 'packages/app/package.json', {
+    name: 'app',
+    version: '1.0.0',
+  });
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /packageManager: pnpm/);
+  assert.match(report, /layout: monorepo\/workspaces/);
+  assert.match(report, /repoSignals: nested-node-package/);
+  assert.match(report, /selectedPreset: node-pnpm-monorepo \(source=inference\)/);
+});
+
+test('adopt infers staged generic for rootless mixed-language repos with nested node packages', () => {
+  const repo = setupRootlessNestedNodeRepo('gov-cli-adopt-rootless-mixed-nested-node', {
+    mixedLanguage: true,
+  });
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  const patch = readFileSync(path.join(repo, '.governance', 'patches', 'adopt.patch'), 'utf8');
+  assert.match(report, /packageManager: generic/);
+  assert.match(report, /layout: mixed-language/);
+  assert.match(report, /inferenceStatus: confident/);
+  assert.match(report, /repoSignals: java, nested-node-package, python/);
+  assert.match(report, /packageRoots: adapters\/node-playwright\/package\.json/);
+  assert.match(report, /operationalPackageRoots: none/);
+  assert.match(report, /inferredPreset: generic/);
+  assert.match(report, /selectedPreset: generic \(source=inference\)/);
+  assert.doesNotMatch(report, /selectedPreset: node-npm-cjs/);
+  assert.match(patch, new RegExp(escapeRegex(genericSelfCheckCommand)));
+  assert.doesNotMatch(patch, /npm run -s format:check/);
+});
+
+test('adopt does not infer node npm preset from rootless nested package alone', () => {
+  const repo = setupRootlessNestedNodeRepo('gov-cli-adopt-rootless-nested-node-only');
+
+  const result = run(['adopt'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  assert.match(report, /packageManager: generic/);
+  assert.match(report, /layout: rootless/);
+  assert.match(report, /repoSignals: nested-node-package/);
+  assert.match(report, /selectedPreset: generic \(source=inference\)/);
+  assert.doesNotMatch(report, /selectedPreset: node-npm-cjs/);
+});
+
+test('adopt explicit node preset override still wins for rootless nested node repos', () => {
+  const repo = setupRootlessNestedNodeRepo('gov-cli-adopt-rootless-nested-node-cli-preset', {
+    mixedLanguage: true,
+  });
+
+  const result = run(['adopt', '--preset', 'node-npm-cjs'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const report = readFileSync(path.join(repo, '.governance', 'adopt-report.md'), 'utf8');
+  const patch = readFileSync(path.join(repo, '.governance', 'patches', 'adopt.patch'), 'utf8');
+  assert.match(report, /layout: mixed-language/);
+  assert.match(report, /inferredPreset: generic/);
+  assert.match(report, /selectedPreset: node-npm-cjs \(source=cli\)/);
+  assert.match(patch, /npm run -s format:check/);
 });
 
 test('adopt explicit preset override unblocks hybrid npm repos', () => {
