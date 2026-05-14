@@ -191,6 +191,7 @@ The framework is driven by `governance.config.json` and validated against `gover
 | `gates.preCommit` | Commands to run on pre-commit |
 | `gates.prePush` | Commands to run on pre-push |
 | `ci.preCiCommand` | Optional command to run once before `ci-check` executes selected CI gates |
+| `generatedArtifacts.syncRules` | Optional source/generated artifact relationships to validate by running a configured generator command |
 | `agentic.*` | Paths and safety controls for role/skill registries, artifacts, and adapter generation |
 | `branchProtection.blockDirectPush` | Branches that block direct pushes |
 | `branchProtection.branchNamePattern` | Regex for allowed branch names |
@@ -212,6 +213,16 @@ The framework is driven by `governance.config.json` and validated against `gover
   },
   "ci": {
     "preCiCommand": "npm run codegen"
+  },
+  "generatedArtifacts": {
+    "syncRules": [
+      {
+        "name": "tracker-markdown",
+        "sourcePath": "docs/tracker.json",
+        "generatedPaths": ["docs/client-side-production-gap-tracker.md"],
+        "command": "npm run gen:tracker"
+      }
+    ]
   },
   "agentic": {
     "enabled": true,
@@ -238,6 +249,8 @@ The framework is driven by `governance.config.json` and validated against `gover
 ```
 
 `ci.preCiCommand` is optional. When present, `ci-check` runs it once after config/node/tracker validation and before the selected `preCommit` / `prePush` gate commands. Use a generic command such as `npm run codegen`; Prisma-style repos can point it at `npx prisma generate`.
+
+`generatedArtifacts.syncRules` is optional. When configured, `check` and `ci-check` run each rule's command and fail if the command changes any listed generated output, removes a listed file, or mutates the canonical source. This catches stale mirrors such as `docs/tracker.json` -> `docs/client-side-production-gap-tracker.md`; run the configured command, add the source/generated files to the Git index, and commit them before retrying. No files are staged or committed automatically.
 
 The `agentic` block enables vendor-neutral role, skill, handoff, retrospective, and adapter validation. `generated/adapters/**` stays generated output; canonical policy remains in `docs/agentic/**` and `governance/*.json`.
 
@@ -438,7 +451,7 @@ CLI equivalent (package mode):
 
 - `upgrade` is conflict-aware by default and writes no files when conflicts are found.
 - Use `--force` to overwrite conflicts; a backup snapshot is created before writes.
-- During `upgrade` and forced `adopt`, generated config preserves supported repo-owned sections from `governance.config.json`: `tracker`, `gates`, `ci`, `branchProtection`, and `node`.
+- During `upgrade` and forced `adopt`, generated config preserves supported repo-owned sections from `governance.config.json`: `tracker`, `gates`, `ci`, `generatedArtifacts`, `branchProtection`, and `node`.
 - Managed docs/templates are rendered from the preserved tracker settings, so custom tracker paths such as `task.md` remain the documented source of truth.
 - `upgrade --force` does not promise to preserve arbitrary edits inside managed blocks; place durable local prose outside managed blocks or keep it in repo-owned files.
 - Use `--patch` (or `--patch=<path>`) to write deterministic patch output for review.

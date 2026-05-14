@@ -258,7 +258,8 @@ Monthly checklist (all items required):
 8. Bypass policy is consistent (`--no-verify` requires explicit user approval).
 9. Definition-of-Done criteria are consistent (workshop traceability + phase/state finalization conditions).
 10. Branch protection profile for `main` matches this document (run protection API check and compare required fields).
-11. Terminology contract conformance is validated using the deterministic commands in this file.
+11. Generated-artifact sync guidance remains aligned with `generatedArtifacts.syncRules` validation in `governance.config.json`.
+12. Terminology contract conformance is validated using the deterministic commands in this file.
 
 Output and evidence format:
 

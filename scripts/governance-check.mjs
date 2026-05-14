@@ -242,7 +242,7 @@ const ARTIFACT_FILES = [
   SCHEMA_PATH,
 ];
 
-const PRESERVED_CONFIG_SECTIONS = ['tracker', 'gates', 'ci', 'branchProtection', 'agentic', 'node'];
+const PRESERVED_CONFIG_SECTIONS = ['tracker', 'gates', 'ci', 'generatedArtifacts', 'branchProtection', 'agentic', 'node'];
 const TRACKER_RENDERED_ARTIFACTS = new Set([
   'AGENTS.md',
   '.agent/workflows/governance.md',
@@ -496,6 +496,17 @@ function runCommand(command, args, extraEnv = {}) {
   };
 }
 
+function readGitIndexFileBuffer(relPath) {
+  if (!isGitRepo()) return null;
+  const result = spawnSync('git', ['show', `:${relPath}`], {
+    shell: process.platform === 'win32',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: TARGET_ROOT,
+  });
+  if (result.status !== 0) return null;
+  return result.stdout || Buffer.alloc(0);
+}
+
 function npmCommandEnv() {
   const cacheDir = targetPath(path.join('.governance', 'npm-cache'));
   mkdirSync(cacheDir, { recursive: true });
@@ -563,8 +574,16 @@ function checksumText(content) {
   return createHash('sha256').update(normalizeForChecksum(content), 'utf8').digest('hex');
 }
 
+function rawChecksumBuffer(content) {
+  return createHash('sha256').update(content).digest('hex');
+}
+
 function checksumFile(filePath) {
   return checksumText(readFileSync(filePath, 'utf8'));
+}
+
+function rawChecksumFile(filePath) {
+  return rawChecksumBuffer(readFileSync(filePath));
 }
 
 function packageVersion() {
@@ -2728,6 +2747,90 @@ function checkTrackerExists(trackerFile) {
   }
 }
 
+function validateGeneratedArtifactSync(config) {
+  const rules = config.generatedArtifacts?.syncRules || [];
+  if (rules.length === 0) return;
+  const gitRepo = isGitRepo();
+
+  for (let i = 0; i < rules.length; i += 1) {
+    const rule = rules[i];
+    const ruleName = rule.name || `syncRules[${i}]`;
+    const source = resolveRepoPathInput(rule.sourcePath, `${ruleName}.sourcePath`);
+    const generated = rule.generatedPaths
+      .map((generatedPath, index) => resolveRepoPathInput(generatedPath, `${ruleName}.generatedPaths[${index}]`));
+    const missing = [source, ...generated].filter((relPath) => !existsSync(targetPath(relPath)));
+
+    if (missing.length > 0) {
+      fail(`✖ Generated artifact sync '${ruleName}' references missing file(s): ${missing.join(', ')}`);
+    }
+
+    const indexedSource = readGitIndexFileBuffer(source);
+    if (gitRepo && indexedSource === null) {
+      fail(`✖ Generated artifact sync '${ruleName}' source file is not tracked in the git index: ${source}`);
+    }
+
+    const sourceChecksum = rawChecksumFile(targetPath(source));
+    if (indexedSource !== null && rawChecksumBuffer(indexedSource) !== sourceChecksum) {
+      fail(
+        `✖ Generated artifact sync '${ruleName}' source file has unstaged changes: ${source}. ` +
+        'Add the canonical source and generated artifact(s) to the git index before retrying.'
+      );
+    }
+    const generatedBaselines = new Map();
+    for (const relPath of generated) {
+      const indexedContent = readGitIndexFileBuffer(relPath);
+      if (gitRepo && indexedContent === null) {
+        fail(`✖ Generated artifact sync '${ruleName}' generated file is not tracked in the git index: ${relPath}`);
+      }
+      generatedBaselines.set(
+        relPath,
+        indexedContent === null ? rawChecksumFile(targetPath(relPath)) : rawChecksumBuffer(indexedContent)
+      );
+    }
+
+    info(`[governance] Generated artifact sync '${ruleName}': ${rule.command}`);
+    const result = runShellCommand(rule.command);
+    if (!result.ok) {
+      fail(`✖ Generated artifact sync command failed for '${ruleName}': "${rule.command}"`);
+    }
+
+    if (!existsSync(targetPath(source))) {
+      fail(`✖ Generated artifact sync '${ruleName}' removed source file: ${source}`);
+    }
+
+    const nextSourceChecksum = rawChecksumFile(targetPath(source));
+    if (nextSourceChecksum !== sourceChecksum) {
+      fail(`✖ Generated artifact sync '${ruleName}' changed source file '${source}'. Generators must not rewrite canonical sources.`);
+    }
+
+    const changedGenerated = [];
+    const missingGenerated = [];
+    for (const relPath of generated) {
+      const abs = targetPath(relPath);
+      if (!existsSync(abs)) {
+        missingGenerated.push(relPath);
+        continue;
+      }
+      if (rawChecksumFile(abs) !== generatedBaselines.get(relPath)) {
+        changedGenerated.push(relPath);
+      }
+    }
+
+    if (missingGenerated.length > 0) {
+      fail(`✖ Generated artifact sync '${ruleName}' removed generated file(s): ${missingGenerated.join(', ')}`);
+    }
+
+    if (changedGenerated.length > 0) {
+      fail(
+        `✖ Generated artifact drift detected for '${ruleName}'. ` +
+        `Run "${rule.command}", add the generated artifact(s), and commit them: ${changedGenerated.join(', ')}`
+      );
+    }
+  }
+
+  info(`[governance] Generated artifact sync valid (${rules.length} rule(s)).`);
+}
+
 function runCheck(options) {
   if (!isGitRepo() && !options.skipHooks) {
     fail('✖ Governance check requires a git repository. Use --skip-hooks if running outside git.');
@@ -2741,6 +2844,7 @@ function runCheck(options) {
   }
 
   checkTrackerExists(config.tracker.path);
+  validateGeneratedArtifactSync(config);
   const agentic = validateAgenticArtifacts({ repoRoot: TARGET_ROOT, config });
   if (agentic.issues.length > 0) {
     fail(`✖ Agentic governance validation failed:\n- ${agentic.issues.join('\n- ')}`);
@@ -2801,6 +2905,7 @@ function runCiCheck(options) {
   };
 
   const selected = options.ciGate === 'all' ? ['precommit', 'prepush'] : [options.ciGate];
+  validateGeneratedArtifactSync(config);
   if (preCiCommand) {
     runPreCiCommand(preCiCommand);
   }
