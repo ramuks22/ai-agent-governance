@@ -8,6 +8,7 @@ Thanks for contributing to the AI Agent Governance Framework.
 - All changes must map to a tracker ID or documented exception.
 - Update tracker phase/state as work progresses.
 - For feature-level work, complete requirements workshop before implementation (or document approved hotfix exception).
+- Before moving a PR out of draft or requesting review, follow `.agent/workflows/ready-pr.md`.
 - Run local gates before pushing.
 
 ## Quick start
@@ -26,4 +27,5 @@ Canonical release/maintenance policy and compatibility guidance:
 ## PRs
 
 - Use the PR template and include tracker references.
+- Complete the PR readiness evidence before marking a PR ready for review.
 - If using merge-by-command, include the quoted command in the PR body.

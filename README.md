@@ -119,6 +119,7 @@ npx @ramuks22/ai-agent-governance adopt --apply
 | `.agent/workflows/governance.md` | Core governance checklist |
 | `.agent/workflows/requirements-workshop.md` | Feature requirements workshop workflow |
 | `.agent/workflows/merge-pr.md` | Merge-By-Command Protocol |
+| `.agent/workflows/ready-pr.md` | Draft-to-ready PR review workflow |
 | `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)` | Canonical governance terminology |
 | `docs/development/delivery-governance.md` | Full lifecycle framework |
 | `docs/agentic/operating-model.md` | Canonical vendor-neutral agentic operating model |
@@ -136,7 +137,8 @@ npx @ramuks22/ai-agent-governance adopt --apply
 ├── .agent/workflows/
 │   ├── governance.md                 # Core governance checklist
 │   ├── requirements-workshop.md      # Requirements workshop workflow
-│   └── merge-pr.md                   # Merge-By-Command Protocol
+│   ├── merge-pr.md                   # Merge-By-Command Protocol
+│   └── ready-pr.md                   # Draft-to-ready PR workflow
 ├── docs/
 │   ├── agentic/
 │   │   ├── operating-model.md        # Canonical vendor-neutral agentic operating model
@@ -310,6 +312,17 @@ Regeneration and drift validation:
 npm run governance:adapters
 npm run governance:check
 ```
+
+## Ready-for-Review Workflow
+
+Before moving a PR out of draft or requesting review, follow `.agent/workflows/ready-pr.md`.
+The PR body should record readiness status, readiness evidence, validation evidence,
+and any reason the PR remains draft. Agents should run `gh pr ready <number>` only
+after explicit human request or a repo-owned automation policy authorizes it.
+
+Readiness is only a review-start signal; merge-by-command still requires non-draft
+review evidence or a complete review exception. The first version treats readiness
+fields as required manual governance evidence, not a hard `pr-checklist` validation.
 
 ## Merge-by-Command Protocol
 

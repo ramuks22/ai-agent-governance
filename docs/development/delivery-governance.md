@@ -10,6 +10,7 @@ This document defines delivery rules, source of truth, and local quality gates.
 - Adapter strategy (canonical): `docs/agentic/adapter-strategy.md`
 - Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`
 - Terminology contract (canonical): `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)`
+- PR readiness workflow: `.agent/workflows/ready-pr.md`
 - Branch protection contract (canonical): `.agent/workflows/governance.md` -> `Required Branch Protection for main`
 - Owner merge exception policy (if active): `.agent/workflows/governance.md` -> `Required Branch Protection for main` -> `Approved exception policy (timeboxed)`
 - Release/maintenance policy (canonical): `docs/development/release-maintenance-policy.md`
@@ -71,6 +72,14 @@ If a `git push` fails and you intend to rerun the push using `--no-verify`:
 - Document the approval in the PR description or tracker notes.
 
 ## Before Merging (Merge-By-Command Protocol)
+
+Before requesting review or moving a PR out of draft, follow `.agent/workflows/ready-pr.md`.
+The ready-for-review transition requires tracker/applicability evidence, required
+workshop or hotfix evidence, validation evidence or a documented deferral, and no
+known blocker that should keep the PR in draft. Readiness starts review; it does
+not replace GitHub approval, review exceptions, or merge-by-command requirements.
+The first version treats readiness fields as required manual governance evidence,
+not a hard `pr-checklist` validation.
 
 When an explicit merge command is given (e.g., "merge PR #<number> to main",
 "merge #<number> to main", "push #<number> to main and merge"):

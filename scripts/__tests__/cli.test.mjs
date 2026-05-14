@@ -250,6 +250,9 @@ test('init + check + doctor succeeds in fresh repo', () => {
   assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
   assert.equal(existsSync(path.join(repo, 'governance.config.json')), true);
   assert.equal(existsSync(path.join(repo, '.governance', 'manifest.json')), true);
+  assert.equal(existsSync(path.join(repo, '.agent', 'workflows', 'ready-pr.md')), true);
+  const prTemplate = readFileSync(path.join(repo, '.github', 'pull_request_template.md'), 'utf8');
+  assert.match(prTemplate, /## PR Readiness/);
 
   const check = run(['check'], repo);
   assert.equal(check.status, 0, `${check.stdout}\n${check.stderr}`);
@@ -1120,6 +1123,7 @@ test('adopt generic apply generates self-contained core governance doc reference
     '.agent/workflows/governance.md',
     '.agent/workflows/requirements-workshop.md',
     '.agent/workflows/merge-pr.md',
+    '.agent/workflows/ready-pr.md',
     'docs/development/delivery-governance.md',
   ]);
 });
@@ -1215,6 +1219,7 @@ test('adopt customize then upgrade force preserves known repo-owned config and r
     '.agent/workflows/governance.md',
     '.agent/workflows/requirements-workshop.md',
     '.agent/workflows/merge-pr.md',
+    '.agent/workflows/ready-pr.md',
     'docs/development/delivery-governance.md',
   ]) {
     const content = readFileSync(path.join(repo, relPath), 'utf8');

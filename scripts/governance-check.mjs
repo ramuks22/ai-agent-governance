@@ -212,6 +212,7 @@ const ARTIFACT_FILES = [
   '.agent/workflows/governance.md',
   '.agent/workflows/requirements-workshop.md',
   '.agent/workflows/merge-pr.md',
+  '.agent/workflows/ready-pr.md',
   'docs/development/delivery-governance.md',
   'docs/agentic/operating-model.md',
   'docs/agentic/adapter-strategy.md',
@@ -248,6 +249,7 @@ const TRACKER_RENDERED_ARTIFACTS = new Set([
   '.agent/workflows/governance.md',
   '.agent/workflows/requirements-workshop.md',
   '.agent/workflows/merge-pr.md',
+  '.agent/workflows/ready-pr.md',
   'docs/development/delivery-governance.md',
 ]);
 

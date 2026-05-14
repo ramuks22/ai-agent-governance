@@ -26,6 +26,7 @@ Before starting any work, verify:
 - Adapter strategy: `docs/agentic/adapter-strategy.md`
 - Workflow rules: `.agent/workflows/governance.md`
 - Requirements workshop: `.agent/workflows/requirements-workshop.md`
+- PR readiness workflow: `.agent/workflows/ready-pr.md`
 - Monthly drift review (canonical): `.agent/workflows/governance.md` -> `Governance Consistency Review (Monthly)`
 - Terminology contract (canonical): `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)`
 
@@ -36,8 +37,9 @@ Before starting any work, verify:
 3. Before coding, complete the quick applicability decision and record it in the PR body as:
    `Applicability: Required|Not Required — Reason: <one line>`.
 4. If applicability is `Required`, complete requirements workshop before coding (or document approved hotfix exception).
-5. Use local quality gates (pre-commit + pre-push).
-6. No direct pushes to `main`. Use PRs and the checklist.
+5. Before moving a PR out of draft or requesting review, follow `.agent/workflows/ready-pr.md`.
+6. Use local quality gates (pre-commit + pre-push).
+7. No direct pushes to `main`. Use PRs and the checklist.
 
 ## Merge-by-Command Protocol
 
