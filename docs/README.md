@@ -34,6 +34,7 @@ Onboarding split:
 - Existing repos: use Stage 6 migration (`adopt`) commands.
 - Existing repos with custom or ambiguous tracker layouts: pass `--tracker-path <path>` so `adopt` preserves the current tracker instead of planning canonical `docs/tracker.md`.
 - Existing npm repos with operational nested packages: if `adopt` reports `layout: hybrid` and `inferenceStatus: ambiguous`, rerun with an explicit `--preset`.
+- Rootless mixed-language repos with nested Node packages default to staged `generic`; pass an explicit Node preset only when root governance should run Node package gates.
 
 CI prerequisite hook:
 

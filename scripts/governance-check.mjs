@@ -1144,10 +1144,44 @@ function discoverTrackerCandidates() {
     .sort((a, b) => a.localeCompare(b));
 }
 
-function discoverPackageRoots() {
-  return listRepoFilesForDiscovery()
+function discoverPackageRoots(files = listRepoFilesForDiscovery()) {
+  return files
     .filter((relPath) => path.posix.basename(relPath) === 'package.json')
     .sort((a, b) => a.localeCompare(b));
+}
+
+function detectAdoptRepoSignals(files, packageRoots) {
+  const signals = new Set();
+  if (packageRoots.includes('package.json')) {
+    signals.add('root-node-package');
+  }
+  if (packageRoots.some((packageRoot) => packageRoot !== 'package.json')) {
+    signals.add('nested-node-package');
+  }
+  if (files.some((relPath) => (
+    relPath === 'pom.xml' ||
+    relPath === 'build.gradle' ||
+    relPath === 'build.gradle.kts' ||
+    relPath === 'settings.gradle' ||
+    relPath === 'settings.gradle.kts' ||
+    relPath === 'gradlew' ||
+    relPath.startsWith('src/main/java/') ||
+    relPath.startsWith('src/test/java/')
+  ))) {
+    signals.add('java');
+  }
+  if (files.some((relPath) => (
+    relPath === 'pyproject.toml' ||
+    relPath === 'requirements.txt' ||
+    relPath === 'setup.py' ||
+    relPath === 'setup.cfg' ||
+    relPath === 'Pipfile' ||
+    relPath === 'poetry.lock' ||
+    relPath.endsWith('.py')
+  ))) {
+    signals.add('python');
+  }
+  return [...signals].sort((a, b) => a.localeCompare(b));
 }
 
 function escapeRegex(value) {
@@ -1277,23 +1311,34 @@ function resolveAdoptTrackerState(options = {}) {
 }
 
 function detectAdoptRepoProfile(options = {}) {
+  const repoFiles = listRepoFilesForDiscovery();
+  const packageRoots = discoverPackageRoots(repoFiles);
   const packageJson = tryLoadJson(targetPath('package.json'));
+  const hasValidRootPackage = packageRoots.includes('package.json') &&
+    packageJson &&
+    typeof packageJson === 'object' &&
+    !Array.isArray(packageJson);
   const packageManagerField = String(packageJson?.packageManager || '').toLowerCase();
   const hasPnpmWorkspace = existsSync(targetPath('pnpm-workspace.yaml'));
   const hasPnpmLock = existsSync(targetPath('pnpm-lock.yaml'));
   const hasYarnLock = existsSync(targetPath('yarn.lock'));
   const hasNpmLock = existsSync(targetPath('package-lock.json'));
-  const hasWorkspaces = Array.isArray(packageJson?.workspaces) || typeof packageJson?.workspaces === 'object' || hasPnpmWorkspace;
-  const baseLayout = hasWorkspaces ? 'monorepo/workspaces' : 'single-package';
+  const repoSignals = detectAdoptRepoSignals(repoFiles, packageRoots);
+  const hasLanguageSignals = repoSignals.some((signal) => ['java', 'python'].includes(signal));
+  const hasNestedNodePackages = repoSignals.includes('nested-node-package');
+  const hasWorkspaces = (hasValidRootPackage &&
+    (Array.isArray(packageJson?.workspaces) || typeof packageJson?.workspaces === 'object')) || hasPnpmWorkspace;
+  const baseLayout = hasWorkspaces
+    ? 'monorepo/workspaces'
+    : (hasValidRootPackage ? 'single-package' : (hasLanguageSignals ? 'mixed-language' : 'rootless'));
   const moduleType = packageJson?.type === 'module' ? 'esm' : 'cjs';
-  const packageRoots = discoverPackageRoots();
 
-  let packageManager = 'npm';
-  if (packageManagerField.startsWith('pnpm@') || hasPnpmWorkspace || hasPnpmLock) {
+  let packageManager = hasValidRootPackage ? 'npm' : 'generic';
+  if ((hasValidRootPackage || hasPnpmWorkspace) && (packageManagerField.startsWith('pnpm@') || hasPnpmWorkspace || hasPnpmLock)) {
     packageManager = 'pnpm';
-  } else if (packageManagerField.startsWith('yarn@') || hasYarnLock) {
+  } else if (hasValidRootPackage && (packageManagerField.startsWith('yarn@') || hasYarnLock)) {
     packageManager = 'yarn';
-  } else if (packageManagerField.startsWith('npm@') || hasNpmLock) {
+  } else if (hasValidRootPackage && (packageManagerField.startsWith('npm@') || hasNpmLock)) {
     packageManager = 'npm';
   }
 
@@ -1318,6 +1363,9 @@ function detectAdoptRepoProfile(options = {}) {
   } else if (packageManager === 'yarn' && baseLayout === 'monorepo/workspaces') {
     inferredPreset = 'node-yarn-workspaces';
     inferenceStatus = 'confident';
+  } else if (packageManager === 'generic' && !hasValidRootPackage && (hasNestedNodePackages || hasLanguageSignals || repoFiles.length > 0)) {
+    inferredPreset = 'generic';
+    inferenceStatus = 'confident';
   } else {
     inferenceBlockers.push(
       `Unsupported inferred stack (${packageManager} + ${baseLayout}). ` +
@@ -1337,6 +1385,7 @@ function detectAdoptRepoProfile(options = {}) {
     inferenceBlockers,
     packageRoots,
     operationalPackageRoots,
+    repoSignals,
     hasManifest: existsSync(targetPath(MANIFEST_PATH)),
     hasGovernanceConfig: existsSync(targetPath(CONFIG_PATH)),
     hasTracker: trackerState.hasTracker,
@@ -2149,6 +2198,7 @@ function formatAdoptReport({
     `- layout: ${profile.layout}`,
     `- inferenceStatus: ${profile.inferenceStatus}`,
     `- moduleType: ${profile.moduleType}`,
+    `- repoSignals: ${profile.repoSignals.length ? profile.repoSignals.join(', ') : 'none'}`,
     `- packageRoots: ${profile.packageRoots.length ? profile.packageRoots.join(', ') : 'none'}`,
     `- operationalPackageRoots: ${profile.operationalPackageRoots.length ? profile.operationalPackageRoots.join(', ') : 'none'}`,
     `- inferredPreset: ${profile.inferredPreset || 'none'}`,

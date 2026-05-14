@@ -454,12 +454,15 @@ CLI equivalent (package mode):
 - Exit `2`: migration blockers detected (unsupported inferred stack, managed-file conflicts, or dirty tree for apply mode).
 - Use explicit overrides when inference is ambiguous: `--preset <name>` and `--hook-strategy <auto|core-hooks|git-hooks>`.
 - If the report shows `layout: hybrid` and `inferenceStatus: ambiguous`, the repo has operational nested npm packages and you must rerun `adopt` with an explicit `--preset`.
+- If the report shows `layout: mixed-language` or `layout: rootless` with nested package signals, `adopt` intentionally defaults to staged `generic` instead of inferring Node gates from nested `package.json` files.
 - If the report shows `trackerStatus: custom`, `configured`, `configured-missing`, or `ambiguous`, review `trackerPath` / `trackerCandidates` before applying changes.
 - When an existing repo already has a tracker system, `adopt` will not create `docs/tracker.md` unless canonical tracker mapping is explicitly selected.
 - Resolve ambiguous tracker detection with an explicit override:
   - `npx @ramuks22/ai-agent-governance adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md`
 - Resolve hybrid npm inference with an explicit preset:
   - `npx @ramuks22/ai-agent-governance adopt --preset generic --report .governance/adopt-report.md`
+- Use an explicit Node preset only when root governance should intentionally run Node package gates:
+  - `npx @ramuks22/ai-agent-governance adopt --preset node-npm-cjs --report .governance/adopt-report.md`
 - Use `--preset generic` for staged adoption in unknown repos; use `--preset generic-strict` only when placeholder lint/test/build gates should fail until intentionally replaced.
 - Review the generated report and patch before write operations:
   - `.governance/adopt-report.md`
