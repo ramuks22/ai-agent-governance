@@ -32,7 +32,8 @@ Follow the same checklist below. Document the merge decision in the PR body.
 
 ### Step 1: Verify Review Evidence
 
-Before tracker finalization, confirm the PR is review-ready:
+Before tracker finalization, confirm the PR has completed the readiness workflow in
+`.agent/workflows/ready-pr.md` and is review-ready:
 
 - The PR is not draft.
 - The PR has GitHub review evidence (`reviewDecision=APPROVED`), or the PR body contains a complete review exception.
@@ -111,6 +112,9 @@ The PR body must contain merge-command evidence using one of:
 - For human merges: A note stating "Manual merge per governance protocol"
 
 The PR must also have review evidence from GitHub approval, or a complete review exception block as described in Step 1.
+
+The draft-to-ready transition should already have followed `.agent/workflows/ready-pr.md`.
+Readiness is a review-start signal only; approval or review exception evidence is still required for merge-by-command.
 
 ## Governance Tie-In
 

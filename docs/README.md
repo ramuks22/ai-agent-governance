@@ -77,6 +77,7 @@ Recommended ignore entries for local governance artifacts:
 - `.agent/workflows/governance.md` -> `Terminology Contract (Canonical)` - canonical governance terminology
 - `.agent/workflows/requirements-workshop.md` - feature requirements workshop workflow
 - `.agent/workflows/merge-pr.md` - merge-by-command protocol
+- `.agent/workflows/ready-pr.md` - draft-to-ready PR review workflow
 - `docs/tracker.md` - tracker used by this repo
 
 ## Canonical Registries and Schemas

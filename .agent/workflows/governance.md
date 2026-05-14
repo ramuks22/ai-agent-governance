@@ -24,6 +24,7 @@ Before each major step, verify:
 - Tracker: `docs/tracker.md`
 - Agentic operating model: `docs/agentic/operating-model.md`
 - Adapter strategy: `docs/agentic/adapter-strategy.md`
+- PR readiness workflow: `.agent/workflows/ready-pr.md`
 - Delivery governance: `docs/development/delivery-governance.md`
 
 ## Terminology Contract (Canonical)
@@ -52,7 +53,7 @@ Run these commands to validate terminology alignment:
 1. Disallow shorthand in normative docs:
 
 ```bash
-rg -n "\\bdocs-only\\b" AGENTS.md .agent/workflows/governance.md .agent/workflows/requirements-workshop.md .agent/workflows/merge-pr.md docs/development/delivery-governance.md README.md docs/README.md
+rg -n "\\bdocs-only\\b" AGENTS.md .agent/workflows/governance.md .agent/workflows/requirements-workshop.md .agent/workflows/merge-pr.md .agent/workflows/ready-pr.md docs/development/delivery-governance.md README.md docs/README.md
 ```
 
 Expected: no matches.
@@ -95,8 +96,9 @@ Expected: canonical + pointer-consistent structure.
 2. Update tracker phase/state when work starts and finishes.
 3. Before coding, complete the quick applicability decision and record PR evidence.
 4. If applicability is `Required`, complete the requirements workshop before implementation.
-5. Use local gates (pre-commit + pre-push).
-6. No direct pushes to `main`.
+5. Before moving a PR out of draft or requesting review, follow `.agent/workflows/ready-pr.md`.
+6. Use local gates (pre-commit + pre-push).
+7. No direct pushes to `main`.
 
 ## Requirements Workshop Gate
 
@@ -197,6 +199,12 @@ Approved exception policy (timeboxed):
 **Effect**: The explicit command activates the seven-step checklist in
 `.agent/workflows/merge-pr.md` and permits tracker finalization (`Phase=Merge, State=Complete`) before merge only after review evidence is verified.
 
+Readiness boundary:
+
+- Draft-to-ready review start is governed by `.agent/workflows/ready-pr.md`.
+- A ready PR is not necessarily approved or mergeable.
+- Merge-by-command may start only after the PR is non-draft and has review evidence or a complete review exception.
+
 **Required steps** (in order):
 
 1. Verify review evidence: PR is not draft and is approved, or has a complete review exception
@@ -242,6 +250,7 @@ Review scope:
 - `.agent/workflows/governance.md`
 - `.agent/workflows/requirements-workshop.md`
 - `.agent/workflows/merge-pr.md`
+- `.agent/workflows/ready-pr.md`
 - `docs/development/delivery-governance.md`
 - `.github/pull_request_template.md`
 - `docs/tracker.md` (guidance + findings table semantics)
@@ -255,11 +264,12 @@ Monthly checklist (all items required):
 5. Merge-by-command trigger phrases are consistent.
 6. Merge-by-command step order is consistent, with review evidence before tracker finalization.
 7. Merge-by-command review exception fields and branch-protection limitation are consistent.
-8. Bypass policy is consistent (`--no-verify` requires explicit user approval).
-9. Definition-of-Done criteria are consistent (workshop traceability + phase/state finalization conditions).
-10. Branch protection profile for `main` matches this document (run protection API check and compare required fields).
-11. Generated-artifact sync guidance remains aligned with `generatedArtifacts.syncRules` validation in `governance.config.json`.
-12. Terminology contract conformance is validated using the deterministic commands in this file.
+8. Draft-to-ready readiness prerequisites, evidence fields, and automation limits are consistent.
+9. Bypass policy is consistent (`--no-verify` requires explicit user approval).
+10. Definition-of-Done criteria are consistent (workshop traceability + phase/state finalization conditions).
+11. Branch protection profile for `main` matches this document (run protection API check and compare required fields).
+12. Generated-artifact sync guidance remains aligned with `generatedArtifacts.syncRules` validation in `governance.config.json`.
+13. Terminology contract conformance is validated using the deterministic commands in this file.
 
 Output and evidence format:
 

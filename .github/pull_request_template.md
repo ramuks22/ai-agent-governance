@@ -25,12 +25,20 @@
 - Condition (required if `Yes`, `Emergency` or `Solo Maintainer`):
 - Follow-up Evidence (required if `Yes`):
 
+## PR Readiness
+
+- Ready for Review Status: `Draft|Ready`
+- Readiness Evidence:
+- Validation Evidence:
+- Remaining Draft Reason (required while `Draft`; use `N/A` when `Ready`):
+
 ## Non-negotiable checklist
 
 - [ ] Tracker ID included and tracker phase/state updated
 - [ ] Applicability decision line included in PR body: `Applicability: Required|Not Required — Reason: <one line>`
 - [ ] Tracker evidence references this PR for applicability auditability (each tracker row in `Tracker > IDs` includes `PR #<this-PR-number>` before merge)
 - [ ] If `Applicability: Required`, requirements workshop artifact is linked, or `Hotfix Exception Used: Yes` is selected and the `Hotfix Exception` block is fully completed (`N/A` when `Applicability: Not Required`)
+- [ ] Ready for review evidence is manually complete before marking the PR non-draft; leave unchecked while draft or if blockers remain
 - [ ] No secrets committed (API keys/tokens/passwords)
 - [ ] No new XSS injection surfaces (sanitization preserved)
 - [ ] Lint + format checks pass
