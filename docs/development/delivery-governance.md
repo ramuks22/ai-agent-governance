@@ -60,6 +60,8 @@ Local gates are enforced by git hooks:
 
 CI must mirror pre-push gates for parity.
 
+If `governance.config.json` declares `generatedArtifacts.syncRules`, local and CI checks also run each configured generator and fail when generated outputs drift from their canonical source. Generated files may be updated locally by the command, but they are not staged or committed automatically; add the source/generated files to the Git index before retrying.
+
 ## Bypass Policy (Non-Negotiable)
 
 If a `git push` fails and you intend to rerun the push using `--no-verify`:

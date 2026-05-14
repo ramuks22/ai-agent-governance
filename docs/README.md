@@ -42,6 +42,13 @@ CI prerequisite hook:
 - The feature is config-driven inside `ci-check`; direct and reusable Governance CI workflows need no extra inputs.
 - `doctor` remains invocation-based and does not validate the semantics of `ci.preCiCommand` independently.
 
+Generated artifact sync:
+
+- Set `generatedArtifacts.syncRules` in `governance.config.json` when a canonical source must stay in sync with generated output files.
+- Each rule declares `sourcePath`, `generatedPaths`, and `command`; `check` and `ci-check` run the command and fail if generated outputs drift or the source is rewritten.
+- Example: `docs/tracker.json` can be declared as the source for `docs/client-side-production-gap-tracker.md` with `npm run gen:tracker`.
+- Validation may update generated files locally, but it does not stage or commit them; rerun the command, add source/generated files to the Git index, and commit regenerated outputs before retrying.
+
 ### Governance Artifact Ignore Defaults
 
 Recommended ignore entries for local governance artifacts:

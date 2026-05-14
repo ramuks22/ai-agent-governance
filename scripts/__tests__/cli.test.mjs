@@ -74,6 +74,11 @@ function commitAll(cwd, message = 'chore: commit') {
   assert.equal(commit.status, 0, commit.stderr);
 }
 
+function stageAll(cwd) {
+  const add = runText('git', ['add', '-A'], cwd);
+  assert.equal(add.status, 0, add.stderr);
+}
+
 function writeSampleGovernanceConfig(cwd, trackerPath) {
   writeFileSync(
     path.join(cwd, 'governance.config.json'),
@@ -104,6 +109,37 @@ function writeJsonFile(cwd, relPath, value) {
   const filePath = path.join(cwd, relPath);
   mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+function writeGeneratedTrackerFixture(cwd, items = [{ id: 'AG-GOV-001', title: 'Initial item' }]) {
+  writeJsonFile(cwd, 'docs/tracker.json', { items });
+  mkdirSync(path.join(cwd, 'scripts'), { recursive: true });
+  writeFileSync(
+    path.join(cwd, 'scripts', 'gen-tracker.mjs'),
+    `import { readFileSync, writeFileSync } from 'node:fs';\n` +
+    `const tracker = JSON.parse(readFileSync('docs/tracker.json', 'utf8'));\n` +
+    `const rows = tracker.items.map((item) => \`- \${item.id}: \${item.title}\`).join('\\n');\n` +
+    `writeFileSync('docs/generated-tracker.md', \`# Generated Tracker\\n\\n\${rows}\\n\`, 'utf8');\n`,
+    'utf8'
+  );
+}
+
+function configureGeneratedTrackerRule(cwd, overrides = {}) {
+  const configPath = path.join(cwd, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.generatedArtifacts = {
+    syncRules: [
+      {
+        name: 'tracker-markdown',
+        sourcePath: 'docs/tracker.json',
+        generatedPaths: ['docs/generated-tracker.md'],
+        command: 'node scripts/gen-tracker.mjs',
+        ...overrides,
+      },
+    ],
+  };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  return config;
 }
 
 function escapeRegex(value) {
@@ -615,6 +651,186 @@ test('ci-check rejects non-string preCiCommand config', () => {
   assert.match(result.stderr, /Invalid config/);
 });
 
+test('check validates configured generated artifact sync rules', () => {
+  const repo = setupRepo('gov-cli-generated-sync-pass');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  writeGeneratedTrackerFixture(repo);
+  const generate = runText(process.execPath, ['scripts/gen-tracker.mjs'], repo);
+  assert.equal(generate.status, 0, generate.stderr);
+  configureGeneratedTrackerRule(repo);
+  stageAll(repo);
+
+  const result = run(['check', '--skip-hooks'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /Generated artifact sync 'tracker-markdown'/);
+  assert.match(result.stdout, /Generated artifact sync valid \(1 rule\(s\)\)/);
+});
+
+test('check fails when generated artifact output is stale', () => {
+  const repo = setupRepo('gov-cli-generated-sync-stale');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  writeGeneratedTrackerFixture(repo);
+  const generate = runText(process.execPath, ['scripts/gen-tracker.mjs'], repo);
+  assert.equal(generate.status, 0, generate.stderr);
+  configureGeneratedTrackerRule(repo);
+  stageAll(repo);
+  writeGeneratedTrackerFixture(repo, [
+    { id: 'AG-GOV-001', title: 'Initial item' },
+    { id: 'AG-GOV-002', title: 'New source item' },
+  ]);
+  const stageSourceOnly = runText('git', ['add', 'docs/tracker.json'], repo);
+  assert.equal(stageSourceOnly.status, 0, stageSourceOnly.stderr);
+
+  const result = run(['check', '--skip-hooks'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Generated artifact drift detected for 'tracker-markdown'/);
+  assert.match(result.stderr, /docs\/generated-tracker\.md/);
+  assert.match(readFileSync(path.join(repo, 'docs', 'generated-tracker.md'), 'utf8'), /AG-GOV-002: New source item/);
+
+  const secondRun = run(['check', '--skip-hooks'], repo);
+  assert.equal(secondRun.status, 1, `${secondRun.stdout}\n${secondRun.stderr}`);
+  assert.match(secondRun.stderr, /Generated artifact drift detected for 'tracker-markdown'/);
+});
+
+test('check fails when generated artifact source edits are not staged', () => {
+  const repo = setupRepo('gov-cli-generated-sync-unstaged-source');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  writeGeneratedTrackerFixture(repo);
+  const generate = runText(process.execPath, ['scripts/gen-tracker.mjs'], repo);
+  assert.equal(generate.status, 0, generate.stderr);
+  configureGeneratedTrackerRule(repo);
+  stageAll(repo);
+  writeGeneratedTrackerFixture(repo, [
+    { id: 'AG-GOV-001', title: 'Initial item' },
+    { id: 'AG-GOV-002', title: 'New source item' },
+  ]);
+  const regenerate = runText(process.execPath, ['scripts/gen-tracker.mjs'], repo);
+  assert.equal(regenerate.status, 0, regenerate.stderr);
+  const stageGeneratedOnly = runText('git', ['add', 'docs/generated-tracker.md'], repo);
+  assert.equal(stageGeneratedOnly.status, 0, stageGeneratedOnly.stderr);
+
+  const result = run(['check', '--skip-hooks'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /source file has unstaged changes: docs\/tracker\.json/);
+});
+
+test('check fails before generator execution when generated artifact files are missing', () => {
+  const repo = setupRepo('gov-cli-generated-sync-missing');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  writeGeneratedTrackerFixture(repo);
+  configureGeneratedTrackerRule(repo);
+
+  const result = run(['check', '--skip-hooks'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /references missing file\(s\): docs\/generated-tracker\.md/);
+});
+
+test('check fails when generated artifact command fails', () => {
+  const repo = setupRepo('gov-cli-generated-sync-command-fail');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  writeGeneratedTrackerFixture(repo);
+  const generate = runText(process.execPath, ['scripts/gen-tracker.mjs'], repo);
+  assert.equal(generate.status, 0, generate.stderr);
+  writeFileSync(path.join(repo, 'scripts', 'fail-gen.mjs'), 'process.exit(1);\n', 'utf8');
+  configureGeneratedTrackerRule(repo, { command: 'node scripts/fail-gen.mjs' });
+  stageAll(repo);
+
+  const result = run(['check', '--skip-hooks'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Generated artifact sync command failed for 'tracker-markdown'/);
+});
+
+test('check fails when generated artifact command mutates the source file', () => {
+  const repo = setupRepo('gov-cli-generated-sync-source-mutation');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  writeGeneratedTrackerFixture(repo);
+  const generate = runText(process.execPath, ['scripts/gen-tracker.mjs'], repo);
+  assert.equal(generate.status, 0, generate.stderr);
+  writeFileSync(
+    path.join(repo, 'scripts', 'mutate-source.mjs'),
+    `import { readFileSync, writeFileSync } from 'node:fs';\n` +
+    `const source = readFileSync('docs/tracker.json', 'utf8');\n` +
+    `writeFileSync('docs/tracker.json', source.replace(/\\n/g, '  \\n'), 'utf8');\n`,
+    'utf8'
+  );
+  configureGeneratedTrackerRule(repo, { command: 'node scripts/mutate-source.mjs' });
+  stageAll(repo);
+
+  const result = run(['check', '--skip-hooks'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /changed source file 'docs\/tracker\.json'/);
+});
+
+test('ci-check enforces generated artifact sync before gates', () => {
+  const repo = setupRepo('gov-cli-generated-sync-ci');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  writeGeneratedTrackerFixture(repo);
+  const generate = runText(process.execPath, ['scripts/gen-tracker.mjs'], repo);
+  assert.equal(generate.status, 0, generate.stderr);
+  const config = configureGeneratedTrackerRule(repo);
+  config.ci = { preCiCommand: 'node scripts/gen-tracker.mjs' };
+  config.gates = {
+    preCommit: ['node scripts/ci-gate-helper.mjs should-not-run'],
+    prePush: ['node scripts/ci-gate-helper.mjs should-not-run'],
+  };
+  writeFileSync(
+    path.join(repo, 'scripts', 'ci-gate-helper.mjs'),
+    `import { appendFileSync } from 'node:fs';\nappendFileSync('.ci-gate.log', 'gate-ran\\n');\n`,
+    'utf8'
+  );
+  writeFileSync(path.join(repo, 'governance.config.json'), `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  stageAll(repo);
+  writeGeneratedTrackerFixture(repo, [
+    { id: 'AG-GOV-001', title: 'Initial item' },
+    { id: 'AG-GOV-002', title: 'New source item' },
+  ]);
+  const stageSourceOnly = runText('git', ['add', 'docs/tracker.json'], repo);
+  assert.equal(stageSourceOnly.status, 0, stageSourceOnly.stderr);
+
+  const result = run(['ci-check', '--gate', 'all'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Generated artifact drift detected for 'tracker-markdown'/);
+  assert.doesNotMatch(result.stdout, /\[governance:ci-check\] preCi:/);
+  assert.equal(existsSync(path.join(repo, '.ci-gate.log')), false);
+});
+
+test('check rejects malformed generated artifact sync rules', () => {
+  const repo = setupRepo('gov-cli-generated-sync-invalid-config');
+  const init = run(['init', '--preset', 'node-npm-cjs', '--hook-strategy', 'auto'], repo);
+  assert.equal(init.status, 0, `${init.stdout}\n${init.stderr}`);
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.generatedArtifacts = {
+    syncRules: [
+      {
+        sourcePath: 'docs/tracker.json',
+        generatedPaths: [],
+        command: 'node scripts/gen-tracker.mjs',
+      },
+    ],
+  };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['check', '--skip-hooks'], repo);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Invalid config/);
+});
+
 test('invalid preset error lists all supported presets', () => {
   const repo = setupRepo('gov-cli-invalid-preset');
   const result = run(['init', '--preset', 'unknown-preset'], repo);
@@ -958,6 +1174,16 @@ test('adopt customize then upgrade force preserves known repo-owned config and r
     prePush: ['npm run custom:test', 'npm run custom:build'],
   };
   config.ci = { preCiCommand: 'npm run codegen' };
+  config.generatedArtifacts = {
+    syncRules: [
+      {
+        name: 'custom-tracker',
+        sourcePath: 'task.json',
+        generatedPaths: ['task.md'],
+        command: 'npm run gen:tracker',
+      },
+    ],
+  };
   config.branchProtection = {
     blockDirectPush: ['main', 'master', 'production'],
     branchNamePattern: '^(feat|fix|codex)\\/[a-z0-9._-]+$',
@@ -972,6 +1198,7 @@ test('adopt customize then upgrade force preserves known repo-owned config and r
   assert.deepEqual(updated.tracker, config.tracker);
   assert.deepEqual(updated.gates, config.gates);
   assert.deepEqual(updated.ci, config.ci);
+  assert.deepEqual(updated.generatedArtifacts, config.generatedArtifacts);
   assert.deepEqual(updated.branchProtection, config.branchProtection);
   assert.deepEqual(updated.node, config.node);
 
@@ -979,6 +1206,7 @@ test('adopt customize then upgrade force preserves known repo-owned config and r
   assert.deepEqual(exampleConfig.tracker, config.tracker);
   assert.deepEqual(exampleConfig.gates, config.gates);
   assert.deepEqual(exampleConfig.ci, config.ci);
+  assert.deepEqual(exampleConfig.generatedArtifacts, config.generatedArtifacts);
   assert.deepEqual(exampleConfig.branchProtection, config.branchProtection);
   assert.deepEqual(exampleConfig.node, config.node);
 
@@ -1022,6 +1250,37 @@ test('adopt preserves ci.preCiCommand when regenerating config', () => {
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   const updated = JSON.parse(readFileSync(configPath, 'utf8'));
   assert.deepEqual(updated.ci, { preCiCommand: 'npm run codegen' });
+});
+
+test('adopt preserves generated artifact sync rules when regenerating config', () => {
+  const repo = setupRepo('gov-cli-adopt-preserve-generated-artifacts');
+  mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ name: 'sample', version: '1.0.0' }, null, 2),
+    'utf8'
+  );
+  writeFileSync(path.join(repo, 'docs', 'tracker.md'), '# Tracker\n', 'utf8');
+  writeSampleGovernanceConfig(repo, 'docs/tracker.md');
+
+  const configPath = path.join(repo, 'governance.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  config.generatedArtifacts = {
+    syncRules: [
+      {
+        name: 'tracker-markdown',
+        sourcePath: 'docs/tracker.json',
+        generatedPaths: ['docs/generated-tracker.md'],
+        command: 'npm run gen:tracker',
+      },
+    ],
+  };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const result = run(['adopt', '--apply', '--force'], repo);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const updated = JSON.parse(readFileSync(configPath, 'utf8'));
+  assert.deepEqual(updated.generatedArtifacts, config.generatedArtifacts);
 });
 
 test('upgrade preserves ci.preCiCommand when rewriting managed config', () => {
