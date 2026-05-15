@@ -16,6 +16,6 @@
     "build": "echo 'Build placeholder: replace for your stack'"
   },
   "devDependencies": {
-    "@ramuks22/ai-agent-governance": "1.1.0"
+    "@ramuks22/ai-agent-governance": "github:ramuks22/ai-agent-governance#248cec572b0db1e44e228a607b4acb1a78e3813a"
   }
 }

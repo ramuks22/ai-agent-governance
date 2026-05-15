@@ -1511,7 +1511,7 @@ test('adopt --apply blocks on dirty tree unless --force, and force path records 
   assert.doesNotMatch(forced.stdout, /\[governance:adopt\] Ignore guidance:/);
   assert.equal(existsSync(path.join(repo, '.governance', 'manifest.json')), true);
   assert.equal(existsSync(path.join(repo, '.governance', 'backups', 'index.json')), true);
-  assert.match(forced.stdout, /Rollback: npx @ramuks22\/ai-agent-governance rollback --to/);
+  assert.match(forced.stdout, /Rollback: npx --no-install ai-governance rollback --to/);
 });
 
 test('adopt rejects missing non-canonical --tracker-path values with actionable error', () => {
@@ -1566,9 +1566,9 @@ for (const [suffix, scriptCommand] of [
     assert.match(report, /operationalPackageRoots: backend\/package\.json/);
     assert.match(report, /inferredPreset: none/);
     assert.match(report, /selectedPreset: none \(explicit --preset required\)/);
-    assert.match(report, /Report-only \(node-npm-esm\): `npx @ramuks22\/ai-agent-governance adopt --preset node-npm-esm --hook-strategy auto --report \.governance\/adopt-report\.md`/);
-    assert.match(report, /Report-only \(node-npm-cjs\): `npx @ramuks22\/ai-agent-governance adopt --preset node-npm-cjs --hook-strategy auto --report \.governance\/adopt-report\.md`/);
-    assert.match(report, /Report-only \(generic\): `npx @ramuks22\/ai-agent-governance adopt --preset generic --hook-strategy auto --report \.governance\/adopt-report\.md`/);
+    assert.match(report, /Report-only \(node-npm-esm\): `npx --no-install ai-governance adopt --preset node-npm-esm --hook-strategy auto --report \.governance\/adopt-report\.md`/);
+    assert.match(report, /Report-only \(node-npm-cjs\): `npx --no-install ai-governance adopt --preset node-npm-cjs --hook-strategy auto --report \.governance\/adopt-report\.md`/);
+    assert.match(report, /Report-only \(generic\): `npx --no-install ai-governance adopt --preset generic --hook-strategy auto --report \.governance\/adopt-report\.md`/);
     assert.doesNotMatch(report, /\|\s+(create|update|conflict)\s+\|\s+governance\.config\.json\s+\|/);
     assert.doesNotMatch(report, /\|\s+(create|update|conflict)\s+\|\s+docs\/tracker\.md\s+\|/);
     assert.doesNotMatch(report, /\|\s+(create|update|conflict)\s+\|\s+\.githooks\/pre-commit\s+\|/);
@@ -1970,4 +1970,25 @@ test('installable distribution docs mention release-check report mode', () => {
   assert.match(readme, /release-check --scope all --report both --out-dir \.governance\/release-check/);
   assert.match(docsIndex, /Installable Distribution \(AG-GOV-003 Stage 12\+\)/);
   assert.match(policy, /Preferred automation path \(Stage 10\)/);
+});
+
+test('install docs use supported GitHub dependency path before npm publication', () => {
+  const readme = readFileSync(path.join(process.cwd(), 'README.md'), 'utf8');
+  const docsIndex = readFileSync(path.join(process.cwd(), 'docs', 'README.md'), 'utf8');
+  const policy = readFileSync(path.join(process.cwd(), 'docs', 'development', 'release-maintenance-policy.md'), 'utf8');
+  const templatePackage = JSON.parse(
+    readFileSync(path.join(process.cwd(), 'templates', 'greenfield', 'package.json'), 'utf8')
+  );
+  const quickstart = readme.match(/## 5-Minute Quickstart[\s\S]*?### Preset Matrix/)?.[0] || '';
+
+  assert.match(quickstart, /npm install -D github:ramuks22\/ai-agent-governance#<PINNED_TAG_OR_SHA>/);
+  assert.match(quickstart, /npx --no-install ai-governance init --preset node-npm-cjs/);
+  assert.doesNotMatch(quickstart, /npm install -D @ramuks22\/ai-agent-governance/);
+  assert.doesNotMatch(quickstart, /npx @ramuks22\/ai-agent-governance/);
+  assert.match(docsIndex, /npm install -D github:ramuks22\/ai-agent-governance#<PINNED_TAG_OR_SHA>/);
+  assert.match(policy, /current supported package source is pinned GitHub dependency until npm publication/);
+
+  const dependency = templatePackage.devDependencies?.[packageName] || '';
+  assert.match(dependency, /^github:ramuks22\/ai-agent-governance#[0-9a-f]{40}$/);
+  assert.doesNotMatch(dependency, /#(?:main|master|latest)$/);
 });

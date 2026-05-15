@@ -45,25 +45,40 @@ Stage 8 scope note:
 | Runtime | Node.js only |
 | Node versions | 20.x and 22.x validated; package engine floor is `>=20` |
 | OS support | macOS, Linux, Windows |
-| Package manager (install/runtime) | npm first-class |
+| Package manager (install/runtime) | npm first-class; current supported package source is pinned GitHub dependency until npm publication |
 | Preset generation (`init`) | `node-npm-cjs`, `node-npm-esm`, `node-pnpm-monorepo`, `node-yarn-workspaces`, `generic` |
 | Runtime non-goals | Bun and Deno |
 
 ## Install and Upgrade Paths
 
-### Online installation (connected)
+### Online installation (connected, current supported path)
+
+`@ramuks22/ai-agent-governance` is not currently published to npm. Use a pinned
+GitHub dependency until an npm release exists.
 
 ```bash
-npm install -D @ramuks22/ai-agent-governance
-npx @ramuks22/ai-agent-governance init --preset node-npm-cjs --hook-strategy auto
-npx @ramuks22/ai-agent-governance check
-npx @ramuks22/ai-agent-governance ci-check --gate all
-npx @ramuks22/ai-agent-governance doctor
+npm install -D github:ramuks22/ai-agent-governance#<PINNED_TAG_OR_SHA>
+npx --no-install ai-governance init --preset node-npm-cjs --hook-strategy auto
+npx --no-install ai-governance check
+npx --no-install ai-governance ci-check --gate all
+npx --no-install ai-governance doctor
 ```
+
+Published npm package commands are supported only after the package is released
+to npm and the version is explicitly pinned.
 
 ### Offline fallback installation (air-gapped or restricted network)
 
-Prepare artifact on a connected machine:
+Before npm publication, prepare an artifact from a checked-out copy of this
+repository at the pinned tag or SHA:
+
+```bash
+git checkout <PINNED_TAG_OR_SHA>
+npm pack
+```
+
+After npm publication, a connected machine may instead pack an explicitly pinned
+published version:
 
 ```bash
 npm pack @ramuks22/ai-agent-governance@<VERSION>
@@ -72,7 +87,7 @@ npm pack @ramuks22/ai-agent-governance@<VERSION>
 Install and verify in target repository:
 
 ```bash
-npm install -D ./ai-agent-governance-<VERSION>.tgz
+npm install -D ./<TARBALL>.tgz
 npx ai-governance init --preset node-npm-cjs --hook-strategy auto
 npx ai-governance check
 npx ai-governance ci-check --gate all
@@ -90,17 +105,17 @@ npx ai-governance doctor
 Preferred automation path (Stage 10):
 
 ```bash
-npx @ramuks22/ai-agent-governance release-check --scope all
-npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check
+npx --no-install ai-governance release-check --scope all
+npx --no-install ai-governance release-check --scope all --report both --out-dir .governance/release-check
 ```
 
 Scope-specific runs:
 
 ```bash
-npx @ramuks22/ai-agent-governance release-check --scope maintenance
-npx @ramuks22/ai-agent-governance release-check --scope distribution
-npx @ramuks22/ai-agent-governance release-check --scope maintenance --report json --out-dir .governance/release-check
-npx @ramuks22/ai-agent-governance release-check --scope distribution --report md --out-dir .governance/release-check
+npx --no-install ai-governance release-check --scope maintenance
+npx --no-install ai-governance release-check --scope distribution
+npx --no-install ai-governance release-check --scope maintenance --report json --out-dir .governance/release-check
+npx --no-install ai-governance release-check --scope distribution --report md --out-dir .governance/release-check
 ```
 
 Stage 10 report contract:
@@ -111,7 +126,7 @@ Stage 10 report contract:
 
 Stage 11 controlled publish contract:
 
-- Command: `npx @ramuks22/ai-agent-governance release-publish`
+- Command: `npx --no-install ai-governance release-publish`
 - Default mode (without `--apply`): dry-run readiness only; no publish/tag side effects.
 - Apply mode (`--apply`): executes publish in strict order:
   1. `npm publish --access public --tag <dist-tag>`
@@ -154,7 +169,8 @@ const policy = fs.readFileSync("docs/development/release-maintenance-policy.md",
 const stage0 = fs.readFileSync("plans/ag-gov-003-stage0-decision-doc.md", "utf8");
 if ((pkg.engines || {}).node !== ">=20") process.exit(1);
 if (!/Node versions \\| 20\\.x and 22\\.x/.test(policy)) process.exit(1);
-if (!/Package manager \\(install\\/runtime\\) \\| npm first-class/.test(policy)) process.exit(1);
+if (!/Package manager \\(install\\/runtime\\) \\| npm first-class; current supported package source is pinned GitHub dependency until npm publication/.test(policy)) process.exit(1);
+if (!/github:ramuks22\\/ai-agent-governance#<PINNED_TAG_OR_SHA>/.test(policy)) process.exit(1);
 if (!/Node versions: 20\\.x and 22\\.x/.test(stage0)) process.exit(1);
 '
 ```
@@ -162,7 +178,7 @@ if (!/Node versions: 20\\.x and 22\\.x/.test(stage0)) process.exit(1);
 4. Offline install guidance presence:
 
 ```bash
-rg -n "Offline fallback installation|npm pack @ramuks22/ai-agent-governance@<VERSION>|npx ai-governance init" docs/development/release-maintenance-policy.md
+rg -n "Offline fallback installation|git checkout <PINNED_TAG_OR_SHA>|npm pack @ramuks22/ai-agent-governance@<VERSION>|npx ai-governance init" docs/development/release-maintenance-policy.md
 ```
 
 5. Deprecation process includes explicit Stage 8 no-runtime-warning contract:
@@ -182,5 +198,5 @@ npm run gate:prepush
 7. Stage 11 release-publish readiness:
 
 ```bash
-npx @ramuks22/ai-agent-governance release-publish --out-dir .governance/release-check
+npx --no-install ai-governance release-publish --out-dir .governance/release-check
 ```

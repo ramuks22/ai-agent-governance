@@ -40,11 +40,11 @@ export function supportedWizardMatrixText() {
 
 export function wizardFallbackExamples() {
   return [
-    'npx @ramuks22/ai-agent-governance init --preset node-npm-cjs',
-    'npx @ramuks22/ai-agent-governance init --preset node-pnpm-monorepo',
-    'npx @ramuks22/ai-agent-governance init --preset node-yarn-workspaces',
-    'npx @ramuks22/ai-agent-governance init --preset generic',
-    'npx @ramuks22/ai-agent-governance init --preset generic-strict',
+    'npx --no-install ai-governance init --preset node-npm-cjs',
+    'npx --no-install ai-governance init --preset node-pnpm-monorepo',
+    'npx --no-install ai-governance init --preset node-yarn-workspaces',
+    'npx --no-install ai-governance init --preset generic',
+    'npx --no-install ai-governance init --preset generic-strict',
   ].join('\n');
 }
 

@@ -29,6 +29,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 const TARGET_ROOT = process.cwd();
 const PACKAGE_NAME = '@ramuks22/ai-agent-governance';
+const LOCAL_CLI_COMMAND = 'npx --no-install ai-governance';
 const GENERIC_SELF_CHECK_COMMAND = `node ./node_modules/${PACKAGE_NAME}/bin/ai-governance.mjs check`;
 const LEGACY_GENERIC_NOOP_GATES = {
   preCommit: [
@@ -297,10 +298,10 @@ const RELEASE_CHECK_METADATA = {
     remediation: 'Restore templates/greenfield/package.json for distribution preflight checks.',
   },
   'distribution.template-pin': {
-    title: 'Template governance dependency pin matches repo version',
+    title: 'Template governance dependency uses a supported exact source',
     severity: 'critical',
     docsRef: TEMPLATE_PACKAGE_PATH,
-    remediation: 'Pin template devDependency to the same version as repository package.json.',
+    remediation: 'Pin template devDependency to an exact npm version after publication or to a GitHub tag/SHA before publication.',
   },
   'distribution.template-scripts': {
     title: 'Template governance script contract is valid',
@@ -312,7 +313,7 @@ const RELEASE_CHECK_METADATA = {
     title: 'Pinned distribution guidance avoids floating refs',
     severity: 'major',
     docsRef: 'docs/development/greenfield-template-publication-runbook.md',
-    remediation: 'Replace @main/@latest in pinned distribution docs/workflow references.',
+    remediation: 'Replace @main, @latest, #main, #master, or #latest in pinned distribution docs/workflow references.',
   },
   'distribution.pack-dry-run': {
     title: 'npm pack dry-run succeeds',
@@ -2174,7 +2175,7 @@ function resolveAdoptPatchPath() {
 
 function buildAdoptCommand(runtimeOptions, options = {}) {
   const preset = options.presetOverride ?? runtimeOptions.preset;
-  const parts = ['npx @ramuks22/ai-agent-governance adopt'];
+  const parts = [`${LOCAL_CLI_COMMAND} adopt`];
   if (preset) {
     parts.push(`--preset ${preset}`);
   }
@@ -2419,7 +2420,7 @@ function runAdopt(options) {
 
   if (backupEntry) {
     info(`[governance:adopt] Snapshot saved: ${backupEntry.id}`);
-    info(`[governance:adopt] Rollback: npx @ramuks22/ai-agent-governance rollback --to ${backupEntry.id}`);
+    info(`[governance:adopt] Rollback: ${LOCAL_CLI_COMMAND} rollback --to ${backupEntry.id}`);
   }
 
   if (!plannedWrites.length && !gitHookWrites.length && !shouldWriteManifest) {
@@ -2519,13 +2520,13 @@ async function runInit(options) {
   }
 
   info('[governance:init] Initialization complete.');
-  info('[governance:init] Next: npx @ramuks22/ai-agent-governance check');
+  info(`[governance:init] Next: ${LOCAL_CLI_COMMAND} check`);
 }
 
 function runUpgrade(options) {
   const manifest = readManifest();
   if (!manifest) {
-    fail('✖ Missing .governance/manifest.json. Run: npx @ramuks22/ai-agent-governance init');
+    fail(`✖ Missing .governance/manifest.json. Run: ${LOCAL_CLI_COMMAND} init`);
   }
 
   const upgradePreset = manifest.preset || options.preset;
@@ -2983,6 +2984,9 @@ function evaluateReleaseMaintenanceChecks() {
   if (!/Package manager \(install\/runtime\) \| npm first-class/.test(policy)) {
     compatibilityChecks.push('policy must declare npm first-class support');
   }
+  if (!/github:ramuks22\/ai-agent-governance#<PINNED_TAG_OR_SHA>/.test(policy)) {
+    compatibilityChecks.push('policy must declare the current pinned GitHub dependency install source');
+  }
   if (!/Node versions:\s*20\.x and 22\.x/.test(stage0Content)) {
     compatibilityChecks.push('Stage 0 decision doc must retain Node versions 20.x and 22.x baseline');
   }
@@ -2996,6 +3000,7 @@ function evaluateReleaseMaintenanceChecks() {
 
   const offlineRequirements = [
     /Offline fallback installation/,
+    /git checkout <PINNED_TAG_OR_SHA>/,
     /npm pack @ramuks22\/ai-agent-governance@<VERSION>/,
     /npx ai-governance init/,
   ];
@@ -3020,6 +3025,25 @@ function evaluateReleaseMaintenanceChecks() {
   return checks;
 }
 
+function isSupportedGovernanceDependencyPin(value, expectedVersion) {
+  const dependency = String(value || '').trim();
+  if (dependency === expectedVersion) {
+    return true;
+  }
+
+  const githubPrefix = 'github:ramuks22/ai-agent-governance#';
+  if (!dependency.startsWith(githubPrefix)) {
+    return false;
+  }
+
+  const ref = dependency.slice(githubPrefix.length);
+  if (/^(main|master|latest)$/i.test(ref)) {
+    return false;
+  }
+
+  return /^[0-9a-f]{40}$/i.test(ref) || /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(ref);
+}
+
 function evaluateReleaseDistributionChecks() {
   const checks = [];
   const add = (id, ok, detail) => checks.push({
@@ -3041,12 +3065,13 @@ function evaluateReleaseDistributionChecks() {
   const templatePackage = loadJson(templatePackageAbs, 'template package metadata');
   const expectedVersion = rootPackage.version;
   const pinnedVersion = templatePackage.devDependencies?.[PACKAGE_NAME];
+  const pinSupported = isSupportedGovernanceDependencyPin(pinnedVersion, expectedVersion);
   add(
     'distribution.template-pin',
-    pinnedVersion === expectedVersion,
-    pinnedVersion === expectedVersion
-      ? `template dependency pinned to ${expectedVersion}`
-      : `expected ${PACKAGE_NAME}@${expectedVersion}, found ${pinnedVersion || 'missing'}`
+    pinSupported,
+    pinSupported
+      ? `template dependency uses supported exact source (${pinnedVersion})`
+      : `expected ${PACKAGE_NAME}@${expectedVersion} or github:ramuks22/ai-agent-governance#<tag-or-sha>, found ${pinnedVersion || 'missing'}`
   );
 
   const scripts = templatePackage.scripts || {};
@@ -3065,6 +3090,7 @@ function evaluateReleaseDistributionChecks() {
   );
 
   const pinSensitiveFiles = [
+    TEMPLATE_PACKAGE_PATH,
     'docs/development/greenfield-template-publication-runbook.md',
     '.github/workflows/governance-ci-reusable.yml',
     RELEASE_POLICY_PATH,
@@ -3077,8 +3103,8 @@ function evaluateReleaseDistributionChecks() {
       continue;
     }
     const content = readFileSync(absPath, 'utf8');
-    if (/@main\b|@latest\b/.test(content)) {
-      floatingRefIssues.push(`${relPath} (contains floating ref @main or @latest)`);
+    if (/@(?:main|latest)\b|#(?:main|master|latest)\b/.test(content)) {
+      floatingRefIssues.push(`${relPath} (contains floating ref @main, @latest, #main, #master, or #latest)`);
     }
   }
   add(
@@ -3121,7 +3147,7 @@ function buildReleaseCheckCommand(options) {
     parts.push(`--report ${options.releaseReportFormat}`);
     parts.push(`--out-dir ${options.releaseOutDir}`);
   }
-  return `npx @ramuks22/ai-agent-governance ${parts.join(' ')}`;
+  return `${LOCAL_CLI_COMMAND} ${parts.join(' ')}`;
 }
 
 function formatReleaseCheckMarkdown(report) {
@@ -3288,7 +3314,7 @@ function buildReleasePublishCommand(options, releaseTag) {
   } else {
     parts.push(`--out-dir ${RELEASE_REPORT_DEFAULT_DIR}`);
   }
-  return `npx @ramuks22/ai-agent-governance ${parts.join(' ')}`;
+  return `${LOCAL_CLI_COMMAND} ${parts.join(' ')}`;
 }
 
 function createReleasePublishCheck(id, title, ok, detail) {
