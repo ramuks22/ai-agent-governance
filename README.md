@@ -13,39 +13,43 @@ A standalone, open-source framework for enforcing governance rules on AI coding 
 - 🧩 Schema-backed agent roles, skills, handoffs, and retrospectives
 - 🛠 Deterministic multi-tool adapter generation with drift detection
 
-## 5-Minute Quickstart (Package-First)
+## 5-Minute Quickstart (Current GitHub Dependency Path)
+
+The package is not currently published to npm. Until an npm release exists, use a
+pinned GitHub dependency and run the installed local `ai-governance` binary.
+Replace `<PINNED_TAG_OR_SHA>` with a release tag or commit SHA.
 
 1. **Install the framework package in your repo:**
    ```bash
-   npm install -D @ramuks22/ai-agent-governance
+   npm install -D github:ramuks22/ai-agent-governance#<PINNED_TAG_OR_SHA>
    ```
 
 2. **Initialize governance artifacts:**
    ```bash
-   npx @ramuks22/ai-agent-governance init --preset node-npm-cjs --hook-strategy auto
+   npx --no-install ai-governance init --preset node-npm-cjs --hook-strategy auto
    ```
    Or run guided selection:
    ```bash
-   npx @ramuks22/ai-agent-governance init --wizard --hook-strategy auto
+   npx --no-install ai-governance init --wizard --hook-strategy auto
    ```
 
 3. **Verify setup:**
    ```bash
-   npx @ramuks22/ai-agent-governance check
-   npx @ramuks22/ai-agent-governance ci-check --gate all
-   npx @ramuks22/ai-agent-governance release-check --scope all
-   npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check
-   npx @ramuks22/ai-agent-governance release-publish --out-dir .governance/release-check
-   npx @ramuks22/ai-agent-governance doctor
+   npx --no-install ai-governance check
+   npx --no-install ai-governance ci-check --gate all
+   npx --no-install ai-governance release-check --scope all
+   npx --no-install ai-governance release-check --scope all --report both --out-dir .governance/release-check
+   npx --no-install ai-governance release-publish --out-dir .governance/release-check
+   npx --no-install ai-governance doctor
    ```
 
 4. **Start working!** Open `governance.config.json` to customize gates, tracker path, and ID rules.
 
 5. **Upgrade or rollback managed artifacts when needed:**
    ```bash
-   npx @ramuks22/ai-agent-governance upgrade --dry-run --patch
-   npx @ramuks22/ai-agent-governance adopt --report .governance/adopt-report.md
-   npx @ramuks22/ai-agent-governance rollback --to latest --force
+   npx --no-install ai-governance upgrade --dry-run --patch
+   npx --no-install ai-governance adopt --report .governance/adopt-report.md
+   npx --no-install ai-governance rollback --to latest --force
    ```
 
 ### Preset Matrix
@@ -106,9 +110,9 @@ Manual publication and update process for GitHub Template distribution:
 ### Existing Repository Path (Migration)
 
 ```bash
-npx @ramuks22/ai-agent-governance adopt --report .governance/adopt-report.md
-npx @ramuks22/ai-agent-governance adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md
-npx @ramuks22/ai-agent-governance adopt --apply
+npx --no-install ai-governance adopt --report .governance/adopt-report.md
+npx --no-install ai-governance adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md
+npx --no-install ai-governance adopt --apply
 ```
 
 ## Source of Truth Map
@@ -396,15 +400,15 @@ jobs:
 ```
 
 The reusable workflow runs the governance CLI from the caller repository's installed dependencies with `npx --no-install ai-governance`.
-Install the package in the caller repository before CI runs, either from npm or from a pinned GitHub dependency:
+Install the package in the caller repository before CI runs from a pinned GitHub dependency until npm publication is available:
 
 ```bash
 npm install -D github:ramuks22/ai-agent-governance#<PINNED_TAG_OR_SHA>
 ```
 
-### Optional Direct Pinned Package Commands
+### Optional Direct Pinned Package Commands (After npm Publication)
 
-For GitLab, Bitbucket, or custom pipelines that do not use the reusable workflow, you may invoke a pinned package version directly:
+For GitLab, Bitbucket, or custom pipelines that do not use the reusable workflow, you may invoke a pinned npm package version directly only after `@ramuks22/ai-agent-governance` is published to npm:
 
 ```bash
 npx --yes @ramuks22/ai-agent-governance@<PINNED_PACKAGE_VERSION> check
@@ -444,21 +448,21 @@ The included workflow:
 | `npm run gate:precommit` | Run pre-commit gates manually |
 | `npm run gate:prepush` | Run pre-push gates manually |
 
-CLI equivalent (package mode):
+CLI equivalent after installing the GitHub dependency:
 
-- `npx @ramuks22/ai-agent-governance init`
-- `npx @ramuks22/ai-agent-governance init --wizard`
-- `npx @ramuks22/ai-agent-governance check`
-- `npx @ramuks22/ai-agent-governance ci-check --gate all`
-- `npx @ramuks22/ai-agent-governance release-check --scope all`
-- `npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check`
-- `npx @ramuks22/ai-agent-governance release-publish --out-dir .governance/release-check`
-- `npx @ramuks22/ai-agent-governance release-publish --apply --dist-tag next --tag v1.2.3 --out-dir .governance/release-check`
-- `npx @ramuks22/ai-agent-governance doctor`
-- `npx @ramuks22/ai-agent-governance upgrade`
-- `npx @ramuks22/ai-agent-governance adopt`
-- `npx @ramuks22/ai-agent-governance adopt --apply --force`
-- `npx @ramuks22/ai-agent-governance rollback`
+- `npx --no-install ai-governance init`
+- `npx --no-install ai-governance init --wizard`
+- `npx --no-install ai-governance check`
+- `npx --no-install ai-governance ci-check --gate all`
+- `npx --no-install ai-governance release-check --scope all`
+- `npx --no-install ai-governance release-check --scope all --report both --out-dir .governance/release-check`
+- `npx --no-install ai-governance release-publish --out-dir .governance/release-check`
+- `npx --no-install ai-governance release-publish --apply --dist-tag next --tag v1.2.3 --out-dir .governance/release-check`
+- `npx --no-install ai-governance doctor`
+- `npx --no-install ai-governance upgrade`
+- `npx --no-install ai-governance adopt`
+- `npx --no-install ai-governance adopt --apply --force`
+- `npx --no-install ai-governance rollback`
 
 ### Stage 3/6 Migration Notes
 
@@ -484,17 +488,17 @@ CLI equivalent (package mode):
 - If the report shows `trackerStatus: custom`, `configured`, `configured-missing`, or `ambiguous`, review `trackerPath` / `trackerCandidates` before applying changes.
 - When an existing repo already has a tracker system, `adopt` will not create `docs/tracker.md` unless canonical tracker mapping is explicitly selected.
 - Resolve ambiguous tracker detection with an explicit override:
-  - `npx @ramuks22/ai-agent-governance adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md`
+  - `npx --no-install ai-governance adopt --tracker-path docs/custom-tracker.json --report .governance/adopt-report.md`
 - Resolve hybrid npm inference with an explicit preset:
-  - `npx @ramuks22/ai-agent-governance adopt --preset generic --report .governance/adopt-report.md`
+  - `npx --no-install ai-governance adopt --preset generic --report .governance/adopt-report.md`
 - Use an explicit Node preset only when root governance should intentionally run Node package gates:
-  - `npx @ramuks22/ai-agent-governance adopt --preset node-npm-cjs --report .governance/adopt-report.md`
+  - `npx --no-install ai-governance adopt --preset node-npm-cjs --report .governance/adopt-report.md`
 - Use `--preset generic` for staged adoption in unknown repos; use `--preset generic-strict` only when placeholder lint/test/build gates should fail until intentionally replaced.
 - Review the generated report and patch before write operations:
   - `.governance/adopt-report.md`
   - `.governance/patches/adopt.patch`
 - If apply writes produce unwanted results, restore using snapshot rollback:
-  - `npx @ramuks22/ai-agent-governance rollback --to <snapshot-id>`
+  - `npx --no-install ai-governance rollback --to <snapshot-id>`
 - Known limitation: delegated shell scripts and workspace-targeting commands are not inferred for hybrid detection in this stage; use explicit `--preset` when in doubt.
 
 #### Recommended `.gitignore` Entries

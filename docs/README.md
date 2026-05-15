@@ -4,22 +4,26 @@ This folder contains the governance framework documentation.
 
 ## Installable Distribution (AG-GOV-003 Stage 12+)
 
-Package-first commands:
+Current supported install source:
 
-- `npx @ramuks22/ai-agent-governance init`
-- `npx @ramuks22/ai-agent-governance init --wizard`
-- `npx @ramuks22/ai-agent-governance check`
-- `npx @ramuks22/ai-agent-governance ci-check --gate all`
-- `npx @ramuks22/ai-agent-governance release-check --scope all`
-- `npx @ramuks22/ai-agent-governance release-check --scope all --report both --out-dir .governance/release-check`
-- `npx @ramuks22/ai-agent-governance release-publish --out-dir .governance/release-check`
-- `npx @ramuks22/ai-agent-governance release-publish --apply --dist-tag next --tag v1.2.3 --out-dir .governance/release-check`
-- `npx @ramuks22/ai-agent-governance doctor`
-- `npx @ramuks22/ai-agent-governance upgrade`
-- `npx @ramuks22/ai-agent-governance adopt`
-- `npx @ramuks22/ai-agent-governance adopt --tracker-path docs/custom-tracker.json`
-- `npx @ramuks22/ai-agent-governance adopt --apply --force`
-- `npx @ramuks22/ai-agent-governance rollback`
+- `npm install -D github:ramuks22/ai-agent-governance#<PINNED_TAG_OR_SHA>`
+
+Installed CLI commands:
+
+- `npx --no-install ai-governance init`
+- `npx --no-install ai-governance init --wizard`
+- `npx --no-install ai-governance check`
+- `npx --no-install ai-governance ci-check --gate all`
+- `npx --no-install ai-governance release-check --scope all`
+- `npx --no-install ai-governance release-check --scope all --report both --out-dir .governance/release-check`
+- `npx --no-install ai-governance release-publish --out-dir .governance/release-check`
+- `npx --no-install ai-governance release-publish --apply --dist-tag next --tag v1.2.3 --out-dir .governance/release-check`
+- `npx --no-install ai-governance doctor`
+- `npx --no-install ai-governance upgrade`
+- `npx --no-install ai-governance adopt`
+- `npx --no-install ai-governance adopt --tracker-path docs/custom-tracker.json`
+- `npx --no-install ai-governance adopt --apply --force`
+- `npx --no-install ai-governance rollback`
 
 Legacy/manual mode remains supported as fallback.
 

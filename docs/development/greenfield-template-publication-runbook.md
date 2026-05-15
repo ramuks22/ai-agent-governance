@@ -13,7 +13,7 @@ This runbook is operational guidance for Stage 7 distribution. It does not overr
 ## Prerequisites
 
 - Access to this repository and the template repository.
-- Current governance package version confirmed in `templates/greenfield/package.json`.
+- Current governance dependency source confirmed in `templates/greenfield/package.json`.
 - Stage tracker updates prepared in `docs/tracker.md`.
 
 ## Distribution Paths
@@ -42,13 +42,16 @@ Create or update a dedicated template repository from `templates/greenfield`:
    - `npm run governance:bootstrap`
 5. Record publication evidence in `docs/tracker.md` with PR reference.
 
-## Version Pin Policy
+## Dependency Pin Policy
 
-- `templates/greenfield/package.json` must keep a pinned governance package version (`@ramuks22/ai-agent-governance@<exact-version>`).
-- When bumping this version:
+- `templates/greenfield/package.json` must keep a supported exact governance dependency source.
+- Before npm publication, use `github:ramuks22/ai-agent-governance#<tag-or-sha>`.
+- After npm publication, an exact npm package version (`<exact-version>`) is also valid.
+- Floating branch/channel refs such as default-branch or latest-channel refs are not valid distribution pins.
+- When bumping this dependency:
   - update the template package file,
   - run template bootstrap verification,
-  - update publication evidence with the release/version used.
+  - update publication evidence with the tag, SHA, or release version used.
 
 ## Decision Rule for Adopters
 
@@ -57,7 +60,7 @@ Create or update a dedicated template repository from `templates/greenfield`:
 
 ## Validation Checklist
 
-1. `templates/greenfield/package.json` contains pinned package version.
+1. `templates/greenfield/package.json` contains a supported exact governance dependency source.
 2. `templates/greenfield/package.json` contains `governance:bootstrap`.
 3. Fresh scaffold run completes:
    - `git init` (required for degit scaffolds)
@@ -65,7 +68,7 @@ Create or update a dedicated template repository from `templates/greenfield`:
    - `npm run governance:bootstrap`
 4. Onboarding docs keep explicit greenfield vs existing split.
 5. Run distribution preflight before publication updates:
-   - `npx @ramuks22/ai-agent-governance release-check --scope distribution`
+   - `npx --no-install ai-governance release-check --scope distribution`
 
 ## Deterministic Validation Commands (AG-GOV-035)
 
@@ -76,12 +79,14 @@ Run from repository root:
 ```bash
 node -e '
 const pkg = require("./templates/greenfield/package.json");
-const version = pkg.devDependencies?.["@ramuks22/ai-agent-governance"];
+const dependency = pkg.devDependencies?.["@ramuks22/ai-agent-governance"];
 const scripts = pkg.scripts ?? {};
 const requiredScripts = ["governance:init", "governance:check", "governance:doctor", "governance:bootstrap"];
 const missingScripts = requiredScripts.filter((name) => !scripts[name]);
-if (!version || !/^\\d+\\.\\d+\\.\\d+$/.test(version)) {
-  console.error("Expected pinned @ramuks22/ai-agent-governance version.");
+const exactNpmVersion = /^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(dependency || "");
+const exactGitHubRef = /^github:ramuks22\\/ai-agent-governance#(?:[0-9a-f]{40}|v?\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?)$/i.test(dependency || "");
+if (!exactNpmVersion && !exactGitHubRef) {
+  console.error("Expected exact @ramuks22/ai-agent-governance npm version or GitHub tag/SHA.");
   process.exit(1);
 }
 if (missingScripts.length > 0) {

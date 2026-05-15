@@ -16,6 +16,9 @@ git init
 npm install
 ```
 
+The template currently installs `@ramuks22/ai-agent-governance` from a pinned
+GitHub dependency because the package is not yet published to npm.
+
 3. Bootstrap governance artifacts and checks:
 
 ```bash
